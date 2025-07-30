@@ -167,6 +167,8 @@ const broadcastToDashboard = (message) => {
   console.log(`📡 Broadcast sent to ${successCount} clients (${errorCount} failed)`);
 };
 
+
+
 // Make broadcast function available to routes
 app.use((req, res, next) => {
   req.broadcastToDashboard = broadcastToDashboard;

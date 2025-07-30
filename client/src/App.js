@@ -127,44 +127,9 @@ const TranscriptionSection = ({ finalTranscripts }) => {
   );
 };
 
-const RecommendationsSection = () => {
-  const [recommendations] = useState([
-    {
-      id: 1,
-      type: 'suggestion',
-      title: 'Ask for Customer Details',
-      description: 'Ensure you collect complete customer information early in the call',
-      priority: 'high'
-    },
-    {
-      id: 2,
-      type: 'reminder',
-      title: 'Verify Phone Number',
-      description: 'Double-check the customer\'s contact number for follow-up',
-      priority: 'medium'
-    },
-    {
-      id: 3,
-      type: 'tip',
-      title: 'Understand Requirements',
-      description: 'Listen carefully to customer needs and confirm understanding',
-      priority: 'high'
-    },
-    {
-      id: 4,
-      type: 'action',
-      title: 'Take Notes',
-      description: 'Document key points and follow-up actions during the call',
-      priority: 'low'
-    },
-    {
-      id: 5,
-      type: 'suggestion',
-      title: 'Confirm Next Steps',
-      description: 'End the call by summarizing agreed actions and timelines',
-      priority: 'medium'
-    }
-  ]);
+const RecommendationsSection = ({ aiRecommendations, backendRecommendations }) => {
+  // Combine AI recommendations with backend ones, AI first
+  const allRecommendations = [...aiRecommendations, ...backendRecommendations];
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -175,8 +140,14 @@ const RecommendationsSection = () => {
     }
   };
 
-  const getTypeIcon = (type) => {
-    switch (type) {
+  const getTypeIcon = (rec) => {
+    // Check if it's a contextual AI recommendation
+    if (rec.source === 'contextual_ai') {
+      return '🧠'; // Brain icon for contextual AI
+    }
+    
+    switch (rec.type) {
+      case 'ai_suggestion': return '🤖';
       case 'suggestion': return '💡';
       case 'reminder': return '⏰';
       case 'tip': return '💭';
@@ -185,32 +156,53 @@ const RecommendationsSection = () => {
     }
   };
 
+  const isAIRecommendation = (rec) => {
+    return rec.type === 'ai_suggestion' || rec.source === 'contextual_ai';
+  };
+
   return (
     <div className="section-container">
       <div className="section-header">
         <h2>Recommendations</h2>
-        <span className="recommendation-count">{recommendations.length} items</span>
+        <span className="recommendation-count">
+          {allRecommendations.filter(rec => isAIRecommendation(rec)).length > 0 && (
+            <span className="ai-count">🤖 {allRecommendations.filter(rec => isAIRecommendation(rec)).length} AI • </span>
+          )}
+          {allRecommendations.length} total
+        </span>
       </div>
       <div className="section-content">
-        <div className="recommendations-list">
-          {recommendations.map((rec) => (
-            <div key={rec.id} className="recommendation-item">
-              <div className="recommendation-header">
-                <span className="rec-icon">{getTypeIcon(rec.type)}</span>
-                <span className="rec-title">{rec.title}</span>
-                <span 
-                  className="rec-priority" 
-                  style={{ backgroundColor: getPriorityColor(rec.priority) }}
-                >
-                  {rec.priority}
-                </span>
+        {allRecommendations.length === 0 ? (
+          <div className="empty-state">
+            <p>No recommendations yet</p>
+            <small>Contextual recommendations will appear here when you're on a call...</small>
+          </div>
+        ) : (
+          <div className="recommendations-list">
+            {allRecommendations.map((rec) => (
+              <div key={rec.id} className={`recommendation-item ${isAIRecommendation(rec) ? 'ai-recommendation' : ''}`}>
+                <div className="recommendation-header">
+                  <span className="rec-icon">{getTypeIcon(rec)}</span>
+                  <span className="rec-title">{rec.title}</span>
+                  <span 
+                    className="rec-priority" 
+                    style={{ backgroundColor: getPriorityColor(rec.priority) }}
+                  >
+                    {rec.priority}
+                  </span>
+                  {rec.timestamp && (
+                    <span className="rec-timestamp">
+                      {moment(rec.timestamp).fromNow()}
+                    </span>
+                  )}
+                </div>
+                <div className="recommendation-description">
+                  {rec.description}
+                </div>
               </div>
-              <div className="recommendation-description">
-                {rec.description}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -218,6 +210,8 @@ const RecommendationsSection = () => {
 
 function App() {
   const [finalTranscripts, setFinalTranscripts] = useState([]);
+  const [aiRecommendations, setAiRecommendations] = useState([]);
+  const [backendRecommendations, setBackendRecommendations] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
   const [lastError, setLastError] = useState(null);
@@ -312,6 +306,30 @@ function App() {
               }
               break;
               
+            case 'ai_recommendation':
+              console.log(`🤖 [${receiveTime}] AI RECOMMENDATION RECEIVED:`, message.data);
+              setAiRecommendations(prev => {
+                const newRecommendation = {
+                  id: Date.now(),
+                  type: 'ai_suggestion',
+                  title: 'AI Suggestion',
+                  description: message.data.recommendation,
+                  priority: 'high',
+                  callSid: message.data.callSid,
+                  timestamp: message.data.timestamp
+                };
+                
+                // Keep only last 5 AI recommendations
+                const updated = [...prev, newRecommendation];
+                return updated.slice(-5);
+              });
+              break;
+              
+            case 'backend_recommendations':
+              console.log(`📋 [${receiveTime}] BACKEND RECOMMENDATIONS RECEIVED:`, message.data.length, 'items');
+              setBackendRecommendations(message.data);
+              break;
+              
             case 'transcription_error':
               console.error(`❌ Transcription error:`, message.data);
               setLastError(`Transcription error: ${message.data.error}`);
@@ -399,7 +417,10 @@ function App() {
         <div className="dashboard-grid">
           <TaskListSection />
           <TranscriptionSection finalTranscripts={finalTranscripts} />
-          <RecommendationsSection />
+          <RecommendationsSection 
+            aiRecommendations={aiRecommendations} 
+            backendRecommendations={backendRecommendations} 
+          />
         </div>
       </main>
     </div>

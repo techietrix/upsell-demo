@@ -2,12 +2,19 @@ const express = require('express');
 const expressWs = require('express-ws');
 const twilio = require('twilio');
 const Call = require('../models/Call');
+const redisClient = require('../config/redis');
+const OpenAI = require('openai');
 
 const router = express.Router();
 
 // Add WebSocket support to this router
 expressWs(router);
 const VoiceResponse = twilio.twiml.VoiceResponse;
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Handle incoming calls
 router.post('/voice', async (req, res) => {
@@ -102,6 +109,141 @@ router.get('/task-list', (req, res) => {
   });
   res.json({tasksWithStatus});
 });
+
+
+
+// Helper method to generate contextual recommendations based on conversation
+async function generateRecommendation(callSid, broadcastToDashboard) {
+  try {
+    console.log(`🤖 [${callSid}] Generating contextual recommendations...`);
+
+    // Get transcript data from Redis
+    let transcripts = [];
+    try {
+      const redisData = await redisClient.lRange(callSid, 0, -1);
+      transcripts = redisData.map(item => JSON.parse(item));
+      console.log(`📋 [${callSid}] Retrieved ${transcripts.length} transcripts from Redis`);
+    } catch (redisError) {
+      console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
+      return;
+    }
+
+    if (transcripts.length === 0) {
+      console.log(`⚠️ [${callSid}] No conversation data found for recommendations`);
+      return;
+    }
+
+    // Format conversation for OpenAI
+    const conversationHistory = transcripts.map(transcript => {
+      return `${transcript.role === 'agent' ? 'Agent' : 'Customer'}: ${transcript.text}`;
+    }).join('\n');
+
+    console.log(`📝 [${callSid}] Conversation formatted for OpenAI (${conversationHistory.length} chars)`);
+
+    // Create OpenAI prompt for multiple contextual recommendations
+    const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation. 
+
+Based on the conversation history below, provide 4-5 specific, actionable recommendations for the agent. Each recommendation should be:
+- Professional and empathetic
+- Relevant to the current conversation context
+- Focused on helping resolve the customer's needs
+- Clear and actionable
+- 1-2 sentences each
+
+Return the recommendations in this exact JSON format:
+[
+  {
+    "title": "Specific Action Title",
+    "description": "Clear description of what to do",
+    "priority": "high/medium/low",
+    "type": "suggestion/reminder/tip/action"
+  }
+]
+
+Conversation History:
+${conversationHistory}
+
+Based on this conversation, what are the most helpful recommendations for the agent?`;
+
+    // Call OpenAI API
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful AI assistant providing real-time suggestions to customer service agents during phone conversations. Always respond with valid JSON."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+      });
+
+      const aiResponse = completion.choices[0].message.content.trim();
+      console.log(`🤖 [${callSid}] Raw AI response: ${aiResponse}`);
+      
+      // Parse AI response
+      let recommendations = [];
+      try {
+        // Extract JSON from response (handle cases where AI adds extra text)
+        const jsonStart = aiResponse.indexOf('[');
+        const jsonEnd = aiResponse.lastIndexOf(']') + 1;
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          const jsonStr = aiResponse.substring(jsonStart, jsonEnd);
+          const parsedRecommendations = JSON.parse(jsonStr);
+          
+          // Format recommendations for frontend
+          recommendations = parsedRecommendations.map((rec, index) => ({
+            id: Date.now() + index,
+            type: rec.type || 'suggestion',
+            title: rec.title,
+            description: rec.description,
+            priority: rec.priority || 'medium',
+            timestamp: new Date().toISOString(),
+            callSid: callSid,
+            source: 'contextual_ai'
+          }));
+        }
+      } catch (parseError) {
+        console.error(`❌ [${callSid}] Failed to parse AI recommendations:`, parseError);
+        // Fallback: create single recommendation from raw response
+        recommendations = [{
+          id: Date.now(),
+          type: 'suggestion',
+          title: 'AI Suggestion',
+          description: aiResponse.length > 200 ? aiResponse.substring(0, 200) + '...' : aiResponse,
+          priority: 'high',
+          timestamp: new Date().toISOString(),
+          callSid: callSid,
+          source: 'contextual_ai'
+        }];
+      }
+
+      if (recommendations.length > 0) {
+        console.log(`✅ [${callSid}] Generated ${recommendations.length} contextual recommendations`);
+
+        // Broadcast contextual recommendations to dashboard
+        if (broadcastToDashboard) {
+          broadcastToDashboard({
+            type: 'backend_recommendations',
+            data: recommendations
+          });
+          console.log(`📡 [${callSid}] Contextual recommendations broadcasted to dashboard`);
+        }
+      }
+
+    } catch (openaiError) {
+      console.error(`❌ [${callSid}] OpenAI API error:`, openaiError.message);
+    }
+
+  } catch (error) {
+    console.error(`❌ [${callSid}] Recommendation generation error:`, error);
+  }
+}
 
 // Handle call status updates
 router.post('/call-status', async (req, res) => {
@@ -248,7 +390,20 @@ router.post('/transcription-status', async (req, res) => {
               timestamp: timestamp
             }
           };
-          
+          const storeInRedis = {
+            text: transcript,
+            role: Track === 'inbound_track' ? 'agent' : 'customer',
+            timestamp: timestamp
+          }
+
+          // Store transcript in Redis using RPUSH with CallSid as key
+          try {
+            await redisClient.rPush(CallSid, JSON.stringify(storeInRedis));
+            console.log(`🗄️ [${CallSid}] Transcript stored in Redis - Role: ${storeInRedis.role}, Text: "${transcript}"`);
+          } catch (redisError) {
+            console.error(`❌ [${CallSid}] Redis RPUSH error:`, redisError.message);
+          }
+
           req.broadcastToDashboard(transcriptData);
           console.log(`📡 [${CallSid}] Transcript broadcasted to dashboard`);
 
@@ -270,6 +425,16 @@ router.post('/transcription-status', async (req, res) => {
             { upsert: true }
           );
           console.log(`💾 [${CallSid}] Final transcript saved to database - Track: ${Track}, Text: "${transcript}"`);
+          
+          // Generate AI recommendation when customer finishes speaking
+          if (Track === 'outbound_track') {
+            console.log(`🎯 [${CallSid}] Customer finished speaking, generating AI recommendation...`);
+            // Call recommendation method asynchronously (don't wait for it)
+            generateRecommendation(CallSid, req.broadcastToDashboard).catch(error => {
+              console.error(`❌ [${CallSid}] Failed to generate recommendation:`, error);
+            });
+          }
+          
         } catch (dbError) {
           console.error(`❌ [${CallSid}] Database save error:`, dbError.message);
         }
