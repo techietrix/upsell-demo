@@ -143,7 +143,7 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
     // Create OpenAI prompt for multiple contextual recommendations
     const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation. 
 
-Based on the conversation history below, provide 4-5 specific, actionable recommendations for the agent. Each recommendation should be:
+Based on the conversation history below, provide specific, actionable recommendations for the agent. Each recommendation should be:
 - Professional and empathetic
 - Relevant to the current conversation context
 - Focused on helping resolve the customer's needs
@@ -159,6 +159,7 @@ Return the recommendations in this exact JSON format:
     "type": "suggestion/reminder/tip/action"
   }
 ]
+  ***note: as you are providing realtime suggestions, so you should suggest only one recommendation at a time if required more than one then suggest in the same order.***
 
 Conversation History:
 ${conversationHistory}
