@@ -16,6 +16,152 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Global task management
+const TASKS = [
+  'Should ask for the name of the customer',
+  'Should ask for the phone number of the customer', 
+  'Should ask customer requirements'
+];
+
+let completedTasks = [];
+
+// Reset completed tasks for new calls
+const resetTasksForCall = (callSid) => {
+  completedTasks = [];
+  console.log(`🔄 [${callSid}] Tasks reset for new call`);
+};
+
+// Method to check task completion using OpenAI
+async function checkTaskCompletion(callSid, broadcastToDashboard) {
+  try {
+    console.log(`📋 [${callSid}] Checking task completion...`);
+
+    // Get transcript data from Redis
+    let transcripts = [];
+    try {
+      const redisData = await redisClient.lRange(callSid, 0, -1);
+      transcripts = redisData.map(item => JSON.parse(item));
+      console.log(`📝 [${callSid}] Retrieved ${transcripts.length} transcripts for task analysis`);
+    } catch (redisError) {
+      console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
+      return;
+    }
+
+    if (transcripts.length === 0) {
+      console.log(`⚠️ [${callSid}] No conversation data found for task checking`);
+      return;
+    }
+
+    // Format conversation for OpenAI
+    const conversationHistory = transcripts.map(transcript => {
+      return `${transcript.role === 'agent' ? 'Agent' : 'Customer'}: ${transcript.text}`;
+    }).join('\n');
+
+    // Create prompt to check task completion
+    const tasksToCheck = TASKS.filter(task => !completedTasks.includes(task));
+    
+    if (tasksToCheck.length === 0) {
+      console.log(`✅ [${callSid}] All tasks already completed`);
+      return;
+    }
+
+    const prompt = `You are an AI assistant analyzing a customer service conversation to determine if specific tasks have been completed.
+
+Based on the conversation history below, determine which of these tasks have been completed:
+
+TASKS TO CHECK:
+${tasksToCheck.map((task, index) => `${index + 1}. ${task}`).join('\n')}
+
+CONVERSATION HISTORY:
+${conversationHistory}
+
+Return ONLY a JSON array of task numbers (1, 2, 3, etc.) that have been CLEARLY completed in the conversation. If a task is not completed or only partially addressed, do not include it.
+
+Example response: [1, 3] (if tasks 1 and 3 are completed)
+Response:`;
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a precise AI assistant that analyzes conversations to determine task completion. Only return completed task numbers in JSON array format."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 100,
+        temperature: 0.1,
+      });
+
+      const aiResponse = completion.choices[0].message.content.trim();
+      console.log(`🤖 [${callSid}] Task completion AI response: ${aiResponse}`);
+
+      // Parse AI response
+      try {
+        // Extract JSON array from response
+        const jsonMatch = aiResponse.match(/\[([\d,\s]*)\]/);
+        if (jsonMatch) {
+          const completedTaskNumbers = JSON.parse(jsonMatch[0]);
+          
+          // Convert task numbers to actual task names
+          const newlyCompletedTasks = completedTaskNumbers.map(num => tasksToCheck[num - 1]).filter(Boolean);
+          
+          if (newlyCompletedTasks.length > 0) {
+            // Update global completed tasks
+            completedTasks = [...new Set([...completedTasks, ...newlyCompletedTasks])];
+            
+            console.log(`✅ [${callSid}] Newly completed tasks:`, newlyCompletedTasks);
+            console.log(`📊 [${callSid}] Total completed tasks:`, completedTasks);
+
+            // Broadcast updated task list
+            broadcastTaskList(callSid, broadcastToDashboard);
+          } else {
+            console.log(`📝 [${callSid}] No new tasks completed`);
+          }
+        }
+      } catch (parseError) {
+        console.error(`❌ [${callSid}] Failed to parse task completion response:`, parseError);
+      }
+
+    } catch (openaiError) {
+      console.error(`❌ [${callSid}] OpenAI API error for task checking:`, openaiError.message);
+    }
+
+  } catch (error) {
+    console.error(`❌ [${callSid}] Task completion check error:`, error);
+  }
+}
+
+// Broadcast current task list status
+function broadcastTaskList(callSid, broadcastToDashboard) {
+  try {
+    const tasksWithStatus = TASKS.map(task => {
+      const status = completedTasks.includes(task) ? 'completed' : 'pending';
+      return { task, status };
+    });
+
+    if (broadcastToDashboard) {
+      broadcastToDashboard({
+        type: 'task_list_update',
+        data: {
+          callSid,
+          tasksWithStatus,
+          completedCount: completedTasks.length,
+          totalCount: TASKS.length,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log(`📡 [${callSid}] Task list broadcasted - ${completedTasks.length}/${TASKS.length} completed`);
+    }
+  } catch (error) {
+    console.error(`❌ [${callSid}] Error broadcasting task list:`, error);
+  }
+}
+
 // Handle incoming calls
 router.post('/voice', async (req, res) => {
   const timestamp = new Date().toISOString();
@@ -32,6 +178,9 @@ router.post('/voice', async (req, res) => {
     const targetNumber = process.env.TARGET_PHONE_NUMBER;
 
     console.log(`📞 [${callSid}] Processing call: ${callerNumber} → ${targetNumber}`);
+    
+    // Reset tasks for new call
+    resetTasksForCall(callSid);
 
     // Create call record in database (only if MongoDB is available)
     try {
@@ -92,23 +241,7 @@ router.post('/voice', async (req, res) => {
   }
 });
 
-// Get task list
-router.get('/task-list', (req, res) => {
-  const tasks = [
-    'Should ask for the name of the of customer',
-    'Should ask for the phone number of the customer',
-    'Should ask customer requirements'
-  ];
-  const completedTasks = [
-    'Should ask for the name of the of customer',
-    'Should ask for the phone number of the customer',
-  ];
-  const tasksWithStatus = tasks.map(task => {
-    const status = completedTasks.includes(task) ? 'completed' : 'pending';
-    return {task, status};
-  });
-  res.json({tasksWithStatus});
-});
+
 
 
 
@@ -427,12 +560,20 @@ router.post('/transcription-status', async (req, res) => {
           );
           console.log(`💾 [${CallSid}] Final transcript saved to database - Track: ${Track}, Text: "${transcript}"`);
           
-          // Generate AI recommendation when customer finishes speaking
+          // Generate AI recommendation and check task completion when customer finishes speaking
           if (Track === 'outbound_track') {
-            console.log(`🎯 [${CallSid}] Customer finished speaking, generating AI recommendation...`);
+            console.log(`🎯 [${CallSid}] Customer finished speaking, generating AI recommendation and checking tasks...`);
+            
             // Call recommendation method asynchronously (don't wait for it)
             generateRecommendation(CallSid, req.broadcastToDashboard).catch(error => {
               console.error(`❌ [${CallSid}] Failed to generate recommendation:`, error);
+            });
+          }
+
+          if(Track === 'inbound_track') {
+            // Check task completion asynchronously (don't wait for it)
+            checkTaskCompletion(CallSid, req.broadcastToDashboard).catch(error => {
+              console.error(`❌ [${CallSid}] Failed to check task completion:`, error);
             });
           }
           

@@ -3,64 +3,21 @@ import moment from 'moment';
 import './App.css';
 
 // Individual components for each section
-const TaskListSection = () => {
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const response = await fetch('/api/twilio/task-list');
-        if (!response.ok) {
-          throw new Error('Failed to fetch tasks');
-        }
-        const data = await response.json();
-        setTasks(data.tasksWithStatus || []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTasks();
-    // Refresh tasks every 30 seconds
-    const interval = setInterval(fetchTasks, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="section-container">
-        <div className="section-header">
-          <h2>Task List</h2>
-        </div>
-        <div className="loading">Loading tasks...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="section-container">
-        <div className="section-header">
-          <h2>Task List</h2>
-        </div>
-        <div className="error">Error: {error}</div>
-      </div>
-    );
-  }
-
+const TaskListSection = ({ tasks, completedCount, totalCount }) => {
   return (
     <div className="section-container">
       <div className="section-header">
         <h2>Task List</h2>
-        <span className="task-count">{tasks.length} tasks</span>
+        <span className="task-count">
+          {completedCount}/{totalCount} completed
+        </span>
       </div>
       <div className="section-content">
         {tasks.length === 0 ? (
-          <div className="empty-state">No tasks available</div>
+          <div className="empty-state">
+            <p>No tasks available</p>
+            <small>Task completion will be tracked during calls...</small>
+          </div>
         ) : (
           <div className="task-list">
             {tasks.map((taskItem, index) => (
@@ -212,6 +169,9 @@ function App() {
   const [finalTranscripts, setFinalTranscripts] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);
   const [backendRecommendations, setBackendRecommendations] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
   const [lastError, setLastError] = useState(null);
@@ -330,6 +290,13 @@ function App() {
               setBackendRecommendations(message.data);
               break;
               
+            case 'task_list_update':
+              console.log(`📋 [${receiveTime}] TASK LIST UPDATE RECEIVED:`, message.data);
+              setTasks(message.data.tasksWithStatus || []);
+              setCompletedCount(message.data.completedCount || 0);
+              setTotalCount(message.data.totalCount || 0);
+              break;
+              
             case 'transcription_error':
               console.error(`❌ Transcription error:`, message.data);
               setLastError(`Transcription error: ${message.data.error}`);
@@ -415,7 +382,11 @@ function App() {
 
       <main className="main-content">
         <div className="dashboard-grid">
-          <TaskListSection />
+          <TaskListSection 
+            tasks={tasks}
+            completedCount={completedCount}
+            totalCount={totalCount}
+          />
           <TranscriptionSection finalTranscripts={finalTranscripts} />
           <RecommendationsSection 
             aiRecommendations={aiRecommendations} 

@@ -94,8 +94,6 @@ ngrok http 3001
 
 - `GET /health` - Server health check
 - `POST /api/twilio/voice` - Twilio voice webhook
-- `GET /api/twilio/task-list` - Get task list with status
-
 - `POST /api/twilio/call-status` - Call status updates
 - `POST /api/twilio/recording-status` - Recording availability
 - `POST /api/twilio/transcription-status` - Real-time transcription callbacks
@@ -107,6 +105,7 @@ ngrok http 3001
 ### Dashboard Events
 - `connection_confirmed` - Connection established
 - `recent_transcripts` - Historical transcripts
+- `task_list_update` - Real-time task completion status using AI analysis
 - `backend_recommendations` - Contextual AI recommendations based on conversation
 - `transcript` - Real-time transcript
 - `stream_started` - Call stream began

@@ -80,6 +80,34 @@ app.ws('/ws/dashboard', (ws, req) => {
   
   sendRecentTranscripts();
   
+  // Send initial task list on connection
+  const sendInitialTaskList = () => {
+    try {
+      console.log(`📋 [${clientId}] Sending initial task list...`);
+      
+      ws.send(JSON.stringify({
+        type: 'task_list_update',
+        data: {
+          callSid: null,
+          tasksWithStatus: [
+            { task: 'Should ask for the name of the customer', status: 'pending' },
+            { task: 'Should ask for the phone number of the customer', status: 'pending' },
+            { task: 'Should ask customer requirements', status: 'pending' }
+          ],
+          completedCount: 0,
+          totalCount: 3,
+          timestamp: new Date().toISOString()
+        }
+      }));
+      
+      console.log(`✅ [${clientId}] Initial task list sent successfully`);
+    } catch (error) {
+      console.error(`❌ [${clientId}] Error sending initial task list:`, error);
+    }
+  };
+  
+  sendInitialTaskList();
+  
   // Handle incoming messages from dashboard
   ws.on('message', (message) => {
     try {
