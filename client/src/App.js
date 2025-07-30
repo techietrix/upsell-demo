@@ -126,6 +126,14 @@ const TaskListSection = ({ tasks, completedCount, totalCount }) => {
 };
 
 const TranscriptionSection = ({ finalTranscripts }) => {
+  // Sort transcripts by timestamp in descending order (newest first)
+  const sortedTranscripts = [...finalTranscripts].sort((a, b) => {
+    // Handle cases where timestamp might be missing
+    const timestampA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timestampB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timestampB - timestampA; // Descending order (newest first)
+  });
+
   return (
     <div className="section-container">
       <div className="section-header">
@@ -133,14 +141,14 @@ const TranscriptionSection = ({ finalTranscripts }) => {
         <span className="transcript-count">{finalTranscripts.length} messages</span>
       </div>
       <div className="section-content">
-        {finalTranscripts.length === 0 ? (
+        {sortedTranscripts.length === 0 ? (
           <div className="empty-state">
             <p>No transcriptions yet</p>
             <small>Waiting for call transcriptions...</small>
           </div>
         ) : (
           <div className="transcript-list">
-            {finalTranscripts.map((transcript, index) => {
+            {sortedTranscripts.map((transcript, index) => {
               const role = transcript.role || transcript.track || 'speaker';
               const roleClass = role.toLowerCase();
               
@@ -171,8 +179,14 @@ const TranscriptionSection = ({ finalTranscripts }) => {
 };
 
 const RecommendationsSection = ({ aiRecommendations, backendRecommendations }) => {
-  // Combine AI recommendations with backend ones, AI first
-  const allRecommendations = [...aiRecommendations, ...backendRecommendations];
+  // Combine AI recommendations with backend ones and sort by timestamp (newest first)
+  const allRecommendations = [...aiRecommendations, ...backendRecommendations]
+    .sort((a, b) => {
+      // Handle cases where timestamp might be missing
+      const timestampA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timestampB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timestampB - timestampA; // Descending order (newest first)
+    });
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -390,6 +404,16 @@ function App() {
                   timestamp: message.data.timestamp
                 };
                 
+                // Check for duplicates based on description content
+                const isDuplicate = prev.some(existing => 
+                  existing.description === newRecommendation.description
+                );
+                
+                if (isDuplicate) {
+                  console.log(`⚠️ [${receiveTime}] Duplicate AI recommendation detected, skipping: "${newRecommendation.description}"`);
+                  return prev;
+                }
+                
                 // Keep only last 5 AI recommendations
                 const updated = [...prev, newRecommendation];
                 return updated.slice(-5);
@@ -398,7 +422,31 @@ function App() {
               
             case 'backend_recommendations':
               console.log(`📋 [${receiveTime}] BACKEND RECOMMENDATIONS RECEIVED:`, message.data.length, 'items');
-              setBackendRecommendations(message.data);
+              setBackendRecommendations(prev => {
+                // Accumulate backend recommendations instead of replacing them
+                const newRecommendations = Array.isArray(message.data) ? message.data : [message.data];
+                
+                // Deduplicate based on title and description to prevent duplicates
+                const existingIds = new Set(prev.map(rec => `${rec.title}-${rec.description}`));
+                const uniqueNewRecommendations = newRecommendations.filter(rec => {
+                  const recId = `${rec.title}-${rec.description}`;
+                  if (existingIds.has(recId)) {
+                    console.log(`⚠️ [${receiveTime}] Duplicate recommendation detected, skipping: "${rec.title}"`);
+                    return false;
+                  }
+                  existingIds.add(recId);
+                  return true;
+                });
+                
+                if (uniqueNewRecommendations.length === 0) {
+                  console.log(`📝 [${receiveTime}] No new unique recommendations to add`);
+                  return prev;
+                }
+                
+                const updated = [...prev, ...uniqueNewRecommendations];
+                // Keep only last 10 backend recommendations
+                return updated.slice(-10);
+              });
               break;
               
             case 'task_list_update':
