@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import moment from 'moment';
 import './App.css';
 
@@ -270,7 +270,7 @@ function App() {
   const maxReconnectAttempts = 5;
 
   // Function to load customer number from API
-  const loadCustomerNumber = async () => {
+  const loadCustomerNumber = useCallback(async () => {
     try {
       setIsLoadingCustomerNumber(true);
       setCustomerNumberError(null);
@@ -289,9 +289,9 @@ function App() {
     } finally {
       setIsLoadingCustomerNumber(false);
     }
-  };
+  }, []);
 
-  const connectWebSocket = () => {
+  const connectWebSocket = useCallback(() => {
     const timestamp = new Date().toISOString();
     console.log(`🔌 [${timestamp}] Initializing WebSocket connection...`);
     
@@ -408,6 +408,19 @@ function App() {
               setTotalCount(message.data.totalCount || 0);
               break;
               
+            case 'clear_transcripts':
+              console.log(`🧹 [${receiveTime}] CLEAR TRANSCRIPTS RECEIVED:`, message.data);
+              setFinalTranscripts([]);
+              console.log(`✅ [${receiveTime}] Transcripts cleared for new call: ${message.data.callSid}`);
+              break;
+              
+            case 'clear_recommendations':
+              console.log(`💡 [${receiveTime}] CLEAR RECOMMENDATIONS RECEIVED:`, message.data);
+              setAiRecommendations([]);
+              setBackendRecommendations([]);
+              console.log(`✅ [${receiveTime}] Recommendations cleared for new call: ${message.data.callSid}`);
+              break;
+              
             case 'transcription_error':
               console.error(`❌ Transcription error:`, message.data);
               setLastError(`Transcription error: ${message.data.error}`);
@@ -459,7 +472,7 @@ function App() {
       setLastError('Failed to create WebSocket connection');
       setConnectionStatus('Connection failed');
     }
-  };
+  }, []);
 
   useEffect(() => {
     connectWebSocket();
@@ -474,7 +487,7 @@ function App() {
         wsRef.current.close(1000, 'Component unmounting');
       }
     };
-  }, []);
+  }, [connectWebSocket, loadCustomerNumber]);
 
   return (
     <div className="app">

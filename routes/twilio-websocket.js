@@ -182,6 +182,33 @@ router.post('/voice', async (req, res) => {
     
     // Reset tasks for new call
     resetTasksForCall(callSid);
+    
+    // Broadcast reset task list for new call
+    broadcastTaskList(callSid, req.broadcastToDashboard);
+    
+    // Broadcast message to clear transcripts for new call
+    if (req.broadcastToDashboard) {
+      req.broadcastToDashboard({
+        type: 'clear_transcripts',
+        data: {
+          callSid: callSid,
+          message: 'New call initiated - clearing previous transcripts',
+          timestamp: timestamp
+        }
+      });
+      console.log(`🧹 [${callSid}] Broadcast clear transcripts message sent to dashboard`);
+      
+      // Broadcast message to clear recommendations for new call
+      req.broadcastToDashboard({
+        type: 'clear_recommendations',
+        data: {
+          callSid: callSid,
+          message: 'New call initiated - clearing previous recommendations',
+          timestamp: timestamp
+        }
+      });
+      console.log(`💡 [${callSid}] Broadcast clear recommendations message sent to dashboard`);
+    }
 
     // Create call record in database (only if MongoDB is available)
     try {
