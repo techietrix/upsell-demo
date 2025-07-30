@@ -2,6 +2,92 @@ import React, { useState, useEffect, useRef } from 'react';
 import moment from 'moment';
 import './App.css';
 
+// Customer Number Input Component
+const CustomerNumberSection = ({ customerNumber, setCustomerNumber, isLoading, error }) => {
+  const [inputValue, setInputValue] = useState(customerNumber);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    setInputValue(customerNumber);
+  }, [customerNumber]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    
+    try {
+      const response = await fetch('/api/customer-number', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ customerNumber: inputValue }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setCustomerNumber(inputValue);
+        setSaveMessage('✓ Saved successfully');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } else {
+        setSaveMessage(`✗ Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving customer number:', error);
+      setSaveMessage('✗ Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    }
+  };
+
+  return (
+    <div className="customer-number-section">
+      <div className="customer-number-container">
+        <label htmlFor="customer-number" className="customer-number-label">
+          Target Customer Number:
+        </label>
+        <div className="customer-number-input-group">
+          <input
+            id="customer-number"
+            type="tel"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Enter customer phone number..."
+            className="customer-number-input"
+            disabled={isLoading || isSaving}
+          />
+          <button 
+            onClick={handleSave}
+            disabled={isLoading || isSaving || inputValue === customerNumber}
+            className="customer-number-save-btn"
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+        {saveMessage && (
+          <div className={`save-message ${saveMessage.includes('✓') ? 'success' : 'error'}`}>
+            {saveMessage}
+          </div>
+        )}
+        {error && (
+          <div className="error-message">
+            Error loading customer number: {error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Individual components for each section
 const TaskListSection = ({ tasks, completedCount, totalCount }) => {
   return (
@@ -175,10 +261,35 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
   const [lastError, setLastError] = useState(null);
+  const [customerNumber, setCustomerNumber] = useState('');
+  const [isLoadingCustomerNumber, setIsLoadingCustomerNumber] = useState(true);
+  const [customerNumberError, setCustomerNumberError] = useState(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
+
+  // Function to load customer number from API
+  const loadCustomerNumber = async () => {
+    try {
+      setIsLoadingCustomerNumber(true);
+      setCustomerNumberError(null);
+      
+      const response = await fetch('/api/customer-number');
+      const data = await response.json();
+      
+      if (data.success) {
+        setCustomerNumber(data.customerNumber || '');
+      } else {
+        setCustomerNumberError(data.error || 'Failed to load customer number');
+      }
+    } catch (error) {
+      console.error('Error loading customer number:', error);
+      setCustomerNumberError('Failed to load customer number');
+    } finally {
+      setIsLoadingCustomerNumber(false);
+    }
+  };
 
   const connectWebSocket = () => {
     const timestamp = new Date().toISOString();
@@ -352,6 +463,7 @@ function App() {
 
   useEffect(() => {
     connectWebSocket();
+    loadCustomerNumber();
     
     return () => {
       if (reconnectTimeoutRef.current) {
@@ -379,6 +491,13 @@ function App() {
           )}
         </div>
       </header>
+
+      <CustomerNumberSection
+        customerNumber={customerNumber}
+        setCustomerNumber={setCustomerNumber}
+        isLoading={isLoadingCustomerNumber}
+        error={customerNumberError}
+      />
 
       <main className="main-content">
         <div className="dashboard-grid">

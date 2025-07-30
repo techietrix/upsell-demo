@@ -175,7 +175,8 @@ router.post('/voice', async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body.CallSid || `test-${Date.now()}`;
     const callerNumber = req.body.From || 'Unknown';
-    const targetNumber = process.env.TARGET_PHONE_NUMBER;
+    // const targetNumber = process.env.TARGET_PHONE_NUMBER;`
+    const targetNumber = await redisClient.get('TARGET_PHONE_NUMBER');
 
     console.log(`📞 [${callSid}] Processing call: ${callerNumber} → ${targetNumber}`);
     

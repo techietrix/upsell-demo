@@ -203,6 +203,51 @@ app.use((req, res, next) => {
   next();
 });
 
+// Customer number API endpoints
+app.get('/api/customer-number', async (req, res) => {
+  try {
+    const customerNumber = await redisClient.get('TARGET_PHONE_NUMBER');
+    res.json({ 
+      success: true, 
+      customerNumber: customerNumber || '' 
+    });
+  } catch (error) {
+    console.error('Error getting customer number:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get customer number' 
+    });
+  }
+});
+
+app.post('/api/customer-number', async (req, res) => {
+  try {
+    const { customerNumber } = req.body;
+    
+    if (customerNumber === undefined || customerNumber === null) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Customer number is required' 
+      });
+    }
+    
+    // Save to Redis
+    await redisClient.set('TARGET_PHONE_NUMBER', customerNumber);
+    
+    res.json({ 
+      success: true, 
+      message: 'Customer number saved successfully',
+      customerNumber: customerNumber
+    });
+  } catch (error) {
+    console.error('Error saving customer number:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to save customer number' 
+    });
+  }
+});
+
 // Import and use Twilio routes
 const twilioRoutes = require('./routes/twilio-websocket');
 app.use('/api/twilio', twilioRoutes);

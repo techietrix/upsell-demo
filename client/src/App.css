@@ -460,4 +460,145 @@
     flex-direction: column;
     gap: 8px;
   }
+}
+
+/* Customer Number Section Styles */
+.customer-number-section {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 20px;
+  padding: 20px;
+  max-width: 1360px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.customer-number-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.customer-number-label {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: white;
+  margin: 0;
+}
+
+.customer-number-input-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.customer-number-input {
+  flex: 1;
+  min-width: 280px;
+  padding: 12px 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.customer-number-input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.customer-number-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.customer-number-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.customer-number-save-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  white-space: nowrap;
+}
+
+.customer-number-save-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.customer-number-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.save-message {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: fadeInSlide 0.3s ease-out;
+}
+
+.save-message.success {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4CAF50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.save-message.error {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design for Customer Number Section */
+@media (max-width: 768px) {
+  .customer-number-section {
+    margin: 10px;
+    padding: 16px;
+  }
+  
+  .customer-number-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .customer-number-input {
+    min-width: unset;
+  }
+  
+  .customer-number-save-btn {
+    align-self: flex-start;
+  }
 } 
