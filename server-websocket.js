@@ -90,9 +90,11 @@ app.ws('/ws/dashboard', (ws, req) => {
         data: {
           callSid: null,
           tasksWithStatus: [
-            { task: 'Should ask for the name of the customer', status: 'pending' },
-            { task: 'Should ask for the phone number of the customer', status: 'pending' },
-            { task: 'Should ask customer requirements', status: 'pending' }
+            { task: 'Confirm customer name.', status: 'pending' },
+            { task: "Confirm customer's phone number.", status: 'pending' },
+            { task: 'Ask how they heard about us.', status: 'pending' },
+            { task: 'Ask what type of car customer is interested in.', status: 'pending' },
+            { task: 'Propose a test drive.', status: 'pending' }
           ],
           completedCount: 0,
           totalCount: 3,

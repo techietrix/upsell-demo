@@ -18,9 +18,11 @@ const openai = new OpenAI({
 
 // Global task management
 const TASKS = [
-  'Should ask for the name of the customer',
-  'Should ask for the phone number of the customer', 
-  'Should ask customer requirements'
+  'Confirm customer name.',
+  "Confirm customer's phone number.", 
+  'Ask how they heard about us.',
+  'Ask what type of car customer is interested in.',
+  'Propose a test drive.'
 ];
 
 let completedTasks = [];
@@ -370,6 +372,17 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
       return;
     }
 
+    //get recommendations from redis
+    let previousRecommendations = [];
+    try {
+      const redisData = await redisClient.lRange(`callSid_recommendations`, 0, -1);
+      previousRecommendations = redisData.map(item => JSON.parse(item));
+      console.log(`📋 [${callSid}] Retrieved ${recommendations.length} recommendations from Redis`);
+    } catch (redisError) {
+      console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
+      // return;
+    }
+
     if (transcripts.length === 0) {
       console.log(`⚠️ [${callSid}] No conversation data found for recommendations`);
       return;
@@ -383,30 +396,72 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
     console.log(`📝 [${callSid}] Conversation formatted for OpenAI (${conversationHistory.length} chars)`);
 
     // Create OpenAI prompt for multiple contextual recommendations
-    const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation. 
-
-Based on the conversation history below, provide specific, actionable recommendations for the agent. Each recommendation should be:
-- Professional and empathetic
-- Relevant to the current conversation context
-- Focused on helping resolve the customer's needs
-- Clear and actionable
-- 1-2 sentences each
-
-Return the recommendations in this exact JSON format:
-[
-  {
-    "title": "Specific Action Title",
-    "description": "Clear description of what to do",
-    "priority": "high/medium/low",
-    "type": "suggestion/reminder/tip/action"
-  }
-]
-  ***note: as you are providing realtime suggestions, so you should suggest only one recommendation at a time if required more than one then suggest in the same order.***
-
-Conversation History:
-${conversationHistory}
-
-Based on this conversation, what are the most helpful recommendations for the agent?`;
+    const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation.
+ 
+    Based on the conversation history below, and using SALES PLAYBOOK ADDITIONAL INFORMATION where applicable, provide specific, actionable recommendations for the agent. Each recommendation should be:
+    - Professional and empathetic
+    - Relevant to both the current conversation context and the goals of the Call Template
+    - Focused on helping resolve the customer's needs and the goals of the Call Template
+    - Clear, concise, and actionable
+    - Max of 1-2 sentences each
+     
+    SALES PLAYBOOK ADDITIONAL INFORMATION:
+    Dealership Product/Service Information:
+    Shop happy With our happiness guarantee, you've got 7 days (up to 250 mi) to fall in love with your dream ride or we want it back.
+    Instant cash offer on your old car & walk away with a check. Better yet—use your trade-in to lower your payment on a new ride.
+    Get financing Once you've found your dream ride, we can help you save time at the store by getting approved for a loan online.
+    All of our cars come with our Happiness Guarantee: Love it or we want it back. If you change your mind about your car purchase within 7 days or 250 miles (whichever comes first), simply return the car in the same condition for a refund of the purchase price.
+    Open 7 days a week from 8am to 7pm
+    Objection Handling examples:
+    Objection 1: “what if I change my mind”
+    Response 1: All of our cars come with our Happiness Guarantee: Love it or we want it back.
+    Objection 2: “why are your prices so low?”
+    Response 2: we've built our reputation on honesty and fair pricing guarantee.
+    Objection 3: “how does your trade-in process work?”
+    Response 3: You can get an instant offer online or bring your car and get an appraisal that's good for 7 days or 500 miles, whichever comes first. You can choose to apply your offer towards a new car or well cut you a check—your choice!
+    Objection 4: “how do I know I'm getting a good offer on my trade in?”
+    Response 4: We don't just look at the local market to give you an online offer. We compare pricing across the country, allowing us the opportunity to give you a great offer for your trade.
+    Objection 5: “can I test-drive before I buy?”
+    Response 5: We always encourage guests to check out their car before they buy. You also get 7 days or 250 miles (whichever comes first) to make sure you love your car. Try it out on your commute or see if the kids' car seats fit . . . make sure it's right for you. If not, we'll take it back and refund the purchase price.
+    Objection 6: “what if I need a loan to buy?”
+    Response 6: We have a nationwide network of lenders, and our team will work to help you secure financing. If you don't automatically get qualified online, one of our Finance Team can help you secure alternative finance options.
+    Sales Call Discovery question examples:
+    May I ask what sparked you into considering buying a car?
+    Are you replacing your vehicle?
+    Are there any specific makes or models you are interested in?
+    What features are you looking for in your next vehicle?
+    Is there anything you dislike about your current vehicle?
+    Do you typically drive with kids or pets in the car?
+    Do you need space for hauling items or carrying hobby or work equipment?
+    What are the top 3 things you'd love to see in your new vehicle?
+    How soon do you need a new vehicle?
+    Are you interested in trading in your current vehicle? Would you be interested in looking at pre-owned vehicles?
+    Who will be driving the vehicle most?
+    Have you been to other dealerships?
+    Do you have a specific price range you wish to stay in?
+    May I ask what kept you from purchasing a car there?
+    How are you enjoying your car?
+    Is there anything about your vehicle experience that you wish was better?
+    How many miles have you driven so far?
+    How are you finding the space and comfort?
+    Have you noticed anything that you would like us to investigate?
+    Have you considered the extended warranty?
+     
+    Return the recommendations in this exact JSON format:
+    [
+     {
+       "title": "Specific Action Title",
+       "description": "Clear description of what to do",
+       "priority": "high/medium/low",
+       "type": "suggestion/reminder/tip/action"
+     }
+    ]
+     ***note: as you are providing realtime suggestions, so you should suggest only one recommendation at a time if required more than one then suggest in the same order.***
+     
+    Conversation History:
+    ${conversationHistory}
+     
+    Based on this conversation, what are the most helpful recommendations for the agent?`;
 
     // Call OpenAI API
     try {
@@ -468,6 +523,13 @@ Based on this conversation, what are the most helpful recommendations for the ag
 
       if (recommendations.length > 0) {
         console.log(`✅ [${callSid}] Generated ${recommendations.length} contextual recommendations`);
+        // Store recommendations in Redis
+        try {
+          await redisClient.rPush(`callSid_recommendations`, JSON.stringify(recommendations));
+          console.log(`🗄️ [${callSid}] Recommendations stored in Redis`);
+        } catch (redisError) {
+          console.error(`❌ [${callSid}] Redis storage error:`, redisError.message);
+        }
 
         // Broadcast contextual recommendations to dashboard
         if (broadcastToDashboard) {

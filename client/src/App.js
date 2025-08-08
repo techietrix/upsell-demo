@@ -274,13 +274,13 @@ const CallSummarySection = ({ summary }) => {
   return (
     <div className="section-container">
       <div className="section-header">
-        <h2>Call Summary</h2>
+        <h2>Coaching Summary</h2>
       </div>
       <div className="section-content">
         {!summary ? (
           <div className="empty-state">
-            <p>No summary available</p>
-            <small>Summary will appear after the call ends...</small>
+            <p>No coaching summary available</p>
+            <small>Coaching summary will appear after the call ends...</small>
           </div>
         ) : (
           <div className="summary-text">
@@ -297,8 +297,8 @@ const CallAnalysisSection = ({ analysis }) => {
   if (!analysis) {
     content = (
       <div className="empty-state">
-        <p>No analysis available</p>
-        <small>Analysis will appear after the call ends...</small>
+        <p>No call summary available</p>
+        <small>Call summary will appear after the call ends...</small>
       </div>
     );
   } else {
@@ -364,7 +364,7 @@ const CallAnalysisSection = ({ analysis }) => {
   return (
     <div className="section-container">
       <div className="section-header">
-        <h2>Call Analysis</h2>
+        <h2>Call Summary</h2>
       </div>
       <div className="section-content">
         {content}
