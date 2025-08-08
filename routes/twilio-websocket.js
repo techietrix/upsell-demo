@@ -190,7 +190,13 @@ async function generateCallSummary(callSid) {
     const transcriptText = await buildTranscriptText(callSid);
     if (!transcriptText) return '';
 
-    const userPrompt = `The context contains a call transcript between an SDR and a customer/prospect. The SDR is expected to follow the call plan provided below.\n**CALL PLAN**\n${callPlan}\n**CALL_TRANSCRIPT**\n${transcriptText}`;
+    const userPrompt = `You are an SDR and writing a call summary after a call you had with a customer. The CALL TRANSCRIPT is provided to you. Also the CALL PLAN is provided to you. Summarize the transcript, clearly outlining Next Steps and timelines (if any). If any information required by the CALL PLAN is missing, then state that too.
+
+**CALL PLAN**
+${callPlan}
+ 
+**CALL TRANSCRIPT**
+${transcriptText}`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -215,8 +221,56 @@ async function generateCallAnalysis(callSid) {
     const transcriptText = await buildTranscriptText(callSid);
     if (!transcriptText) return '';
 
-    const userPrompt = `You are supposed to perform two tasks as below:\n**TASK 1**: Analyze the transcript in light of the CALL PLAN and provide any suggestions that the SDR can use to improve his performance.\n**TASK 2**: Summarize the transcript, clearly outlining Next Steps and timelines (if any).\nProvide your output in JSON format only with this shape:\n{\n  "task_improvements": ["bullet", "points"],\n  "summary": "short summary",\n  "next_steps": ["step", "step"],\n  "timeline": "if applicable"\n}\nDo not include any extra commentary or markdown.\n\n**CALL PLAN**\n${callPlan}\n**CALL_TRANSCRIPT**\n${transcriptText}\n\nNote: CALL_PLAN refers to the task list.`;
-
+    const userPrompt = `You are a Sales Coach and revieweing the TRANSCRIPT of an exchange between the SDR and a customer. To perform the analysis, you are provided a CALL PLAN and SALES PLAYBOOK ADDITIONAL INFORMATION. First, you evaluate the transcript against the CALL PLAN,to ensure that each step in the CALL PLAN was completed. If the SDR missed any of the step, then you make a note of it. Then you review the transcript in light of CALL PLAN and SALES PLAYBOOK ADDITIONAL INFORMATION to provide additional guidance to the SDR. Your output contains the following sections: Summary, Missed Actions, Feedback. If no action was missed then you state the fact that no action was missed.    
+ 
+**CALL PLAN**
+${callPlan}
+ 
+**TRANSCRIPT**:
+${transcriptText}
+ 
+**SALES PLAYBOOK ADDITIONAL INFORMATION**:
+    Dealership Product/Service Information:
+    Shop happy With our happiness guarantee, you've got 7 days (up to 250 mi) to fall in love with your dream ride or we want it back.
+    Instant cash offer on your old car & walk away with a check. Better yet—use your trade-in to lower your payment on a new ride.
+    Get financing Once you've found your dream ride, we can help you save time at the store by getting approved for a loan online.
+    All of our cars come with our Happiness Guarantee: Love it or we want it back. If you change your mind about your car purchase within 7 days or 250 miles (whichever comes first), simply return the car in the same condition for a refund of the purchase price.
+    Open 7 days a week from 8am to 7pm
+    Objection Handling examples:
+    Objection 1: “what if I change my mind”
+    Response 1: All of our cars come with our Happiness Guarantee: Love it or we want it back.
+    Objection 2: “why are your prices so low?”
+    Response 2: we've built our reputation on honesty and fair pricing guarantee.
+    Objection 3: “how does your trade-in process work?”
+    Response 3: You can get an instant offer online or bring your car and get an appraisal that's good for 7 days or 500 miles, whichever comes first. You can choose to apply your offer towards a new car or well cut you a check—your choice!
+    Objection 4: “how do I know I'm getting a good offer on my trade in?”
+    Response 4: We don't just look at the local market to give you an online offer. We compare pricing across the country, allowing us the opportunity to give you a great offer for your trade.
+    Objection 5: “can I test-drive before I buy?”
+    Response 5: We always encourage guests to check out their car before they buy. You also get 7 days or 250 miles (whichever comes first) to make sure you love your car. Try it out on your commute or see if the kids' car seats fit . . . make sure it's right for you. If not, we'll take it back and refund the purchase price.
+    Objection 6: “what if I need a loan to buy?”
+    Response 6: We have a nationwide network of lenders, and our team will work to help you secure financing. If you don't automatically get qualified online, one of our Finance Team can help you secure alternative finance options.
+    Sales Call Discovery question examples:
+    May I ask what sparked you into considering buying a car?
+    Are you replacing your vehicle?
+    Are there any specific makes or models you are interested in?
+    What features are you looking for in your next vehicle?
+    Is there anything you dislike about your current vehicle?
+    Do you typically drive with kids or pets in the car?
+    Do you need space for hauling items or carrying hobby or work equipment?
+    What are the top 3 things you'd love to see in your new vehicle?
+    How soon do you need a new vehicle?
+    Are you interested in trading in your current vehicle? Would you be interested in looking at pre-owned vehicles?
+    Who will be driving the vehicle most?
+    Have you been to other dealerships?
+    Do you have a specific price range you wish to stay in?
+    May I ask what kept you from purchasing a car there?
+    How are you enjoying your car?
+    Is there anything about your vehicle experience that you wish was better?
+    How many miles have you driven so far?
+    How are you finding the space and comfort?
+    Have you noticed anything that you would like us to investigate?
+    Have you considered the extended warranty?`
+    
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
