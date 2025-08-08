@@ -80,10 +80,14 @@
 
 .task-section { grid-area: tasks; }
 .recommendations-section { grid-area: recs; }
-.insights-column { grid-area: insights; display: flex; flex-direction: column; gap: 20px; height: 100%; }
+.insights-column { grid-area: insights; display: flex; flex-direction: column; gap: 20px; }
 .transcription-section { grid-area: transcription; }
 
-.insight.half { flex: 1; min-height: 0; }
+.insight.half { flex: 0 1 auto; min-height: 0; }
+
+/* Allow insights to grow by content */
+.insights-column .section-container { height: auto; }
+.insights-column .section-content { flex: 0 0 auto; overflow-y: visible; }
 
 /* Ensure first-row cards stretch evenly */
 .task-section .section-container,

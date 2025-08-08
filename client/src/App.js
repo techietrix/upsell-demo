@@ -713,9 +713,9 @@ function App() {
               <CallAnalysisSection analysis={callAnalysis} />
             </div>
           </div>
-          {/* <div className="transcription-section">
+          <div className="transcription-section">
             <TranscriptionSection finalTranscripts={finalTranscripts} />
-          </div> */}
+          </div>
         </div>
       </main>
     </div>
