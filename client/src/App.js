@@ -319,41 +319,74 @@ const CallAnalysisSection = ({ analysis }) => {
 
     // If we have a parsed object, format it nicely
     if (typeof parsedAnalysis === 'object' && parsedAnalysis !== null) {
+      const summaryValue = parsedAnalysis.Summary || parsedAnalysis.summary;
+      const feedbackValue = parsedAnalysis.Feedback || parsedAnalysis.feedback;
+      const missedActionsValue = parsedAnalysis['Missed Actions'] || parsedAnalysis.missed_actions || parsedAnalysis.missedActions;
+
+      const taskImprovements = parsedAnalysis.task_improvements;
+      const nextSteps = parsedAnalysis.next_steps;
+      const timeline = parsedAnalysis.timeline;
+
+      const renderListOrParagraph = (value) => {
+        if (!value) return null;
+        if (Array.isArray(value)) {
+          return (
+            <ul>
+              {value.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <p>{value}</p>;
+      };
+
       content = (
         <div className="analysis-formatted">
-          {parsedAnalysis.task_improvements && (
+          {(summaryValue || feedbackValue || missedActionsValue) && (
+            <>
+              {summaryValue && (
+                <div className="analysis-section">
+                  <h4>Summary</h4>
+                  {renderListOrParagraph(summaryValue)}
+                </div>
+              )}
+
+              {missedActionsValue && (
+                <div className="analysis-section">
+                  <h4>Missed Actions</h4>
+                  {renderListOrParagraph(missedActionsValue)}
+                </div>
+              )}
+
+              {feedbackValue && (
+                <div className="analysis-section">
+                  <h4>Feedback</h4>
+                  {renderListOrParagraph(feedbackValue)}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Backward compatibility with previous analysis schema */}
+          {taskImprovements && !missedActionsValue && (
             <div className="analysis-section">
               <h4>Task Improvements</h4>
-              <ul>
-                {parsedAnalysis.task_improvements.map((improvement, index) => (
-                  <li key={index}>{improvement}</li>
-                ))}
-              </ul>
+              {renderListOrParagraph(taskImprovements)}
             </div>
           )}
-          
-          {parsedAnalysis.summary && (
-            <div className="analysis-section">
-              <h4>Summary</h4>
-              <p>{parsedAnalysis.summary}</p>
-            </div>
-          )}
-          
-          {parsedAnalysis.next_steps && (
+
+          {nextSteps && (
             <div className="analysis-section">
               <h4>Next Steps</h4>
-              <ul>
-                {parsedAnalysis.next_steps.map((step, index) => (
-                  <li key={index}>{step}</li>
-                ))}
-              </ul>
+              {renderListOrParagraph(nextSteps)}
             </div>
           )}
-          
-          {parsedAnalysis.timeline && (
+
+          {timeline && (
             <div className="analysis-section">
               <h4>Timeline</h4>
-              <p>{parsedAnalysis.timeline}</p>
+              {renderListOrParagraph(timeline)}
             </div>
           )}
         </div>
