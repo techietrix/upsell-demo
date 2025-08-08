@@ -398,14 +398,22 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
     // Create OpenAI prompt for multiple contextual recommendations
     const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation.
  
-    Based on the conversation history below, and using SALES PLAYBOOK ADDITIONAL INFORMATION where applicable, provide specific, actionable recommendations for the agent. Each recommendation should be:
+Based on the TASKS LIST, CONVERSATION HISTORY, PREVIOUS RECOMMENDATIONS and using SALES PLAYBOOK ADDITIONAL INFORMATION where applicable, provide specific, actionable recommendations for the agent. Each recommendation should be:
     - Professional and empathetic
     - Relevant to both the current conversation context and the goals of the Call Template
     - Focused on helping resolve the customer's needs and the goals of the Call Template
     - Clear, concise, and actionable
     - Max of 1-2 sentences each
+ 
+**TASKS LIST**:
+${JSON.stringify(TASKS)}
+ 
+**PREVIOUS RECOMMENDATIONS**
+${JSON.stringify(previousRecommendations)}
+ 
+You do not need to provide recommendation every time. If in your professional judgement, you have already provided the recommendation for the discussion so far or you don’t feel the need for additional recommendation as the agent is doing fine, just provide an empty Array response [].
      
-    SALES PLAYBOOK ADDITIONAL INFORMATION:
+**SALES PLAYBOOK ADDITIONAL INFORMATION**:
     Dealership Product/Service Information:
     Shop happy With our happiness guarantee, you've got 7 days (up to 250 mi) to fall in love with your dream ride or we want it back.
     Instant cash offer on your old car & walk away with a check. Better yet—use your trade-in to lower your payment on a new ride.
@@ -456,12 +464,10 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
        "type": "suggestion/reminder/tip/action"
      }
     ]
-     ***note: as you are providing realtime suggestions, so you should suggest only one recommendation at a time if required more than one then suggest in the same order.***
+     ***note: as you are providing realtime suggestions, so you should suggest only one recommendation at a time.***
      
-    Conversation History:
-    ${conversationHistory}
-     
-    Based on this conversation, what are the most helpful recommendations for the agent?`;
+    **CONVERSATION HISTORY**:
+    ${conversationHistory}`;
 
     // Call OpenAI API
     try {
@@ -482,7 +488,7 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
       });
 
       const aiResponse = completion.choices[0].message.content.trim();
-      console.log(`🤖 [${callSid}] Raw AI response: ${aiResponse}`);
+      console.log(`**********🤖 [${callSid}] Raw AI response: ${aiResponse} **********`);
       
       // Parse AI response
       let recommendations = [];
