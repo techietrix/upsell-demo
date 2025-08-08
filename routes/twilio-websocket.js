@@ -162,6 +162,76 @@ function broadcastTaskList(callSid, broadcastToDashboard) {
   }
 }
 
+// Build call plan text
+function buildCallPlanText() {
+  return TASKS.map((task, idx) => `${idx + 1}. ${task}`).join('\n');
+}
+
+// Build conversation transcript text from Redis
+async function buildTranscriptText(callSid) {
+  try {
+    const redisData = await redisClient.lRange(callSid, 0, -1);
+    const transcripts = redisData.map(item => JSON.parse(item));
+    return transcripts
+      .map(t => `${(t.role || '').toLowerCase() === 'agent' ? 'SDR' : 'Customer'}: ${t.text}`)
+      .join('\n');
+  } catch (e) {
+    console.error(`❌ [${callSid}] Failed to build transcript text:`, e.message);
+    return '';
+  }
+}
+
+// Generate Call Summary
+async function generateCallSummary(callSid) {
+  try {
+    const callPlan = buildCallPlanText();
+    const transcriptText = await buildTranscriptText(callSid);
+    if (!transcriptText) return '';
+
+    const userPrompt = `The context contains a call transcript between an SDR and a customer/prospect. The SDR is expected to follow the call plan provided below.\n**CALL PLAN**\n${callPlan}\n**CALL_TRANSCRIPT**\n${transcriptText}`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a concise assistant. Provide a crisp but comprehensive summary. Keep it under 180 words.' },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 300
+    });
+    return (completion.choices?.[0]?.message?.content || '').trim();
+  } catch (e) {
+    console.error(`❌ [${callSid}] Error generating call summary:`, e.message);
+    return '';
+  }
+}
+
+// Generate Call Analysis (JSON preferred)
+async function generateCallAnalysis(callSid) {
+  try {
+    const callPlan = buildCallPlanText();
+    const transcriptText = await buildTranscriptText(callSid);
+    if (!transcriptText) return '';
+
+    const userPrompt = `You are supposed to perform two tasks as below:\n**TASK 1**: Analyze the transcript in light of the CALL PLAN and provide any suggestions that the SDR can use to improve his performance.\n**TASK 2**: Summarize the transcript, clearly outlining Next Steps and timelines (if any).\nProvide your output in JSON format only with this shape:\n{\n  "task_improvements": ["bullet", "points"],\n  "summary": "short summary",\n  "next_steps": ["step", "step"],\n  "timeline": "if applicable"\n}\nDo not include any extra commentary or markdown.\n\n**CALL PLAN**\n${callPlan}\n**CALL_TRANSCRIPT**\n${transcriptText}\n\nNote: CALL_PLAN refers to the task list.`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'Return only valid JSON. No markdown. No surrounding text.' },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 600
+    });
+    const content = (completion.choices?.[0]?.message?.content || '').trim();
+    return content;
+  } catch (e) {
+    console.error(`❌ [${callSid}] Error generating call analysis:`, e.message);
+    return '';
+  }
+}
+
 // Handle incoming calls
 router.post('/voice', async (req, res) => {
   const timestamp = new Date().toISOString();
@@ -208,6 +278,17 @@ router.post('/voice', async (req, res) => {
         }
       });
       console.log(`💡 [${callSid}] Broadcast clear recommendations message sent to dashboard`);
+
+      // Broadcast message to clear previous call insights
+      req.broadcastToDashboard({
+        type: 'clear_call_insights',
+        data: {
+          callSid: callSid,
+          message: 'New call initiated - clearing previous call insights',
+          timestamp: timestamp
+        }
+      });
+      console.log(`🧼 [${callSid}] Broadcast clear call insights message sent to dashboard`);
     }
 
     // Create call record in database (only if MongoDB is available)
@@ -410,7 +491,7 @@ Based on this conversation, what are the most helpful recommendations for the ag
 // Handle call status updates
 router.post('/call-status', async (req, res) => {
   try {
-    const callSid = req.body.CallSid;
+    const callSid = req.body.ParentCallSid;
     const callStatus = req.body.CallStatus;
     const duration = req.body.CallDuration;
 
@@ -439,6 +520,42 @@ router.post('/call-status', async (req, res) => {
           timestamp: new Date().toISOString()
         }
       });
+    }
+
+    // If call completed, generate and broadcast summary & analysis
+    if (callStatus === 'completed' && req.broadcastToDashboard) {
+      try {
+        const [summaryText, analysisJson] = await Promise.all([
+          generateCallSummary(callSid),
+          generateCallAnalysis(callSid)
+        ]);
+
+        if (summaryText) {
+          req.broadcastToDashboard({
+            type: 'call_summary',
+            data: {
+              callSid,
+              summary: summaryText,
+              timestamp: new Date().toISOString()
+            }
+          });
+          console.log(`🧾 [${callSid}] Call summary broadcasted`);
+        }
+
+        if (analysisJson) {
+          req.broadcastToDashboard({
+            type: 'call_analysis',
+            data: {
+              callSid,
+              analysis: analysisJson,
+              timestamp: new Date().toISOString()
+            }
+          });
+          console.log(`🔎 [${callSid}] Call analysis broadcasted`);
+        }
+      } catch (e) {
+        console.error(`❌ [${callSid}] Failed to generate/broadcast call insights:`, e.message);
+      }
     }
 
     res.sendStatus(200);
@@ -732,6 +849,43 @@ router.ws('/media-stream', (ws, req) => {
           });
         }
         
+        // Generate and broadcast call summary & analysis when media stream stops
+        if (req.broadcastToDashboard && callSid) {
+          console.log(`🧾 [${callSid}] Generating call summary and analysis after media stream stop...`);
+          try {
+            const [summaryText, analysisJson] = await Promise.all([
+              generateCallSummary(callSid),
+              generateCallAnalysis(callSid)
+            ]);
+
+            if (summaryText) {
+              req.broadcastToDashboard({
+                type: 'call_summary',
+                data: {
+                  callSid,
+                  summary: summaryText,
+                  timestamp: new Date().toISOString()
+                }
+              });
+              console.log(`🧾 [${callSid}] Call summary broadcasted from media stream stop`);
+            }
+
+            if (analysisJson) {
+              req.broadcastToDashboard({
+                type: 'call_analysis',
+                data: {
+                  callSid,
+                  analysis: analysisJson,
+                  timestamp: new Date().toISOString()
+                }
+              });
+              console.log(`🔎 [${callSid}] Call analysis broadcasted from media stream stop`);
+            }
+          } catch (e) {
+            console.error(`❌ [${callSid}] Failed to generate/broadcast call insights from media stream stop:`, e.message);
+          }
+        }
+        
         if (deepgramConnection) {
           try {
             deepgramConnection.finish();
@@ -749,7 +903,7 @@ router.ws('/media-stream', (ws, req) => {
     }
   });
 
-  ws.on('close', (code, reason) => {
+  ws.on('close', async (code, reason) => {
     console.log(`\n🔌 [${callSid}] MEDIA WEBSOCKET CLOSED`);
     console.log(`   - Code: ${code}`);
     console.log(`   - Reason: ${reason}`);
@@ -757,6 +911,44 @@ router.ws('/media-stream', (ws, req) => {
     console.log(`   - Audio packets: ${audioPacketCount}`);
     
     isStreamActive = false;
+    
+    // Generate and broadcast call summary & analysis when WebSocket closes (fallback)
+    if (req.broadcastToDashboard && callSid && audioPacketCount > 0) {
+      console.log(`🧾 [${callSid}] Generating call summary and analysis after WebSocket close...`);
+      try {
+        const [summaryText, analysisJson] = await Promise.all([
+          generateCallSummary(callSid),
+          generateCallAnalysis(callSid)
+        ]);
+
+        if (summaryText) {
+          req.broadcastToDashboard({
+            type: 'call_summary',
+            data: {
+              callSid,
+              summary: summaryText,
+              timestamp: new Date().toISOString()
+            }
+          });
+          console.log(`🧾 [${callSid}] Call summary broadcasted from WebSocket close`);
+        }
+
+        if (analysisJson) {
+          req.broadcastToDashboard({
+            type: 'call_analysis',
+            data: {
+              callSid,
+              analysis: analysisJson,
+              timestamp: new Date().toISOString()
+            }
+          });
+          console.log(`🔎 [${callSid}] Call analysis broadcasted from WebSocket close`);
+        }
+      } catch (e) {
+        console.error(`❌ [${callSid}] Failed to generate/broadcast call insights from WebSocket close:`, e.message);
+      }
+    }
+    
     if (deepgramConnection) {
       try {
         deepgramConnection.finish();
@@ -780,6 +972,57 @@ router.ws('/media-stream', (ws, req) => {
       }
     }
   });
+});
+
+// Test endpoint to manually trigger summary and analysis
+router.post('/test-summary/:callSid', async (req, res) => {
+  const { callSid } = req.params;
+  console.log(`🧪 [${callSid}] Manual test trigger for summary and analysis`);
+  
+  try {
+    const [summaryText, analysisJson] = await Promise.all([
+      generateCallSummary(callSid),
+      generateCallAnalysis(callSid)
+    ]);
+
+    if (req.broadcastToDashboard) {
+      if (summaryText) {
+        req.broadcastToDashboard({
+          type: 'call_summary',
+          data: {
+            callSid,
+            summary: summaryText,
+            timestamp: new Date().toISOString()
+          }
+        });
+        console.log(`🧾 [${callSid}] Test call summary broadcasted`);
+      }
+
+      if (analysisJson) {
+        req.broadcastToDashboard({
+          type: 'call_analysis',
+          data: {
+            callSid,
+            analysis: analysisJson,
+            timestamp: new Date().toISOString()
+          }
+        });
+        console.log(`🔎 [${callSid}] Test call analysis broadcasted`);
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: summaryText,
+      analysis: analysisJson
+    });
+  } catch (error) {
+    console.error(`❌ [${callSid}] Test summary/analysis failed:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 module.exports = router;

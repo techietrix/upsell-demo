@@ -265,6 +265,109 @@ const RecommendationsSection = ({ aiRecommendations, backendRecommendations }) =
   );
 };
 
+const CallSummarySection = ({ summary }) => {
+  return (
+    <div className="section-container">
+      <div className="section-header">
+        <h2>Call Summary</h2>
+      </div>
+      <div className="section-content">
+        {!summary ? (
+          <div className="empty-state">
+            <p>No summary available</p>
+            <small>Summary will appear after the call ends...</small>
+          </div>
+        ) : (
+          <div className="summary-text">
+            {summary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const CallAnalysisSection = ({ analysis }) => {
+  let content = null;
+  if (!analysis) {
+    content = (
+      <div className="empty-state">
+        <p>No analysis available</p>
+        <small>Analysis will appear after the call ends...</small>
+      </div>
+    );
+  } else {
+    // Parse analysis if it's a string
+    let parsedAnalysis = analysis;
+    if (typeof analysis === 'string') {
+      try {
+        parsedAnalysis = JSON.parse(analysis);
+      } catch (e) {
+        // If parsing fails, display as raw text
+        content = (
+          <div className="analysis-text">
+            {analysis}
+          </div>
+        );
+      }
+    }
+
+    // If we have a parsed object, format it nicely
+    if (typeof parsedAnalysis === 'object' && parsedAnalysis !== null) {
+      content = (
+        <div className="analysis-formatted">
+          {parsedAnalysis.task_improvements && (
+            <div className="analysis-section">
+              <h4>Task Improvements</h4>
+              <ul>
+                {parsedAnalysis.task_improvements.map((improvement, index) => (
+                  <li key={index}>{improvement}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {parsedAnalysis.summary && (
+            <div className="analysis-section">
+              <h4>Summary</h4>
+              <p>{parsedAnalysis.summary}</p>
+            </div>
+          )}
+          
+          {parsedAnalysis.next_steps && (
+            <div className="analysis-section">
+              <h4>Next Steps</h4>
+              <ul>
+                {parsedAnalysis.next_steps.map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {parsedAnalysis.timeline && (
+            <div className="analysis-section">
+              <h4>Timeline</h4>
+              <p>{parsedAnalysis.timeline}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+  }
+  
+  return (
+    <div className="section-container">
+      <div className="section-header">
+        <h2>Call Analysis</h2>
+      </div>
+      <div className="section-content">
+        {content}
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const [finalTranscripts, setFinalTranscripts] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);
@@ -278,6 +381,8 @@ function App() {
   const [customerNumber, setCustomerNumber] = useState('');
   const [isLoadingCustomerNumber, setIsLoadingCustomerNumber] = useState(true);
   const [customerNumberError, setCustomerNumberError] = useState(null);
+  const [callSummary, setCallSummary] = useState('');
+  const [callAnalysis, setCallAnalysis] = useState(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -448,6 +553,25 @@ function App() {
                 return updated.slice(-10);
               });
               break;
+
+            case 'call_summary':
+              console.log(`🧾 [${receiveTime}] CALL SUMMARY RECEIVED`);
+              setCallSummary(message.data && message.data.summary ? message.data.summary : '');
+              break;
+
+            case 'call_analysis':
+              console.log(`🔎 [${receiveTime}] CALL ANALYSIS RECEIVED`);
+              // if analysis is JSON string, try to parse
+              if (message.data && message.data.analysis) {
+                const analysisPayload = message.data.analysis;
+                try {
+                  const parsed = typeof analysisPayload === 'string' ? JSON.parse(analysisPayload) : analysisPayload;
+                  setCallAnalysis(parsed);
+                } catch (e) {
+                  setCallAnalysis(typeof analysisPayload === 'string' ? analysisPayload : JSON.stringify(analysisPayload));
+                }
+              }
+              break;
               
             case 'task_list_update':
               console.log(`📋 [${receiveTime}] TASK LIST UPDATE RECEIVED:`, message.data);
@@ -467,6 +591,12 @@ function App() {
               setAiRecommendations([]);
               setBackendRecommendations([]);
               console.log(`✅ [${receiveTime}] Recommendations cleared for new call: ${message.data.callSid}`);
+              break;
+
+            case 'clear_call_insights':
+              console.log(`🧹 [${receiveTime}] CLEAR CALL INSIGHTS RECEIVED`);
+              setCallSummary('');
+              setCallAnalysis(null);
               break;
               
             case 'transcription_error':
@@ -562,16 +692,30 @@ function App() {
 
       <main className="main-content">
         <div className="dashboard-grid">
-          <TaskListSection 
-            tasks={tasks}
-            completedCount={completedCount}
-            totalCount={totalCount}
-          />
-          <TranscriptionSection finalTranscripts={finalTranscripts} />
-          <RecommendationsSection 
-            aiRecommendations={aiRecommendations} 
-            backendRecommendations={backendRecommendations} 
-          />
+          <div className="task-section">
+            <TaskListSection 
+              tasks={tasks}
+              completedCount={completedCount}
+              totalCount={totalCount}
+            />
+          </div>
+          <div className="recommendations-section">
+            <RecommendationsSection 
+              aiRecommendations={aiRecommendations} 
+              backendRecommendations={backendRecommendations} 
+            />
+          </div>
+          <div className="insights-column">
+            <div className="insight half">
+              <CallSummarySection summary={callSummary} />
+            </div>
+            <div className="insight half">
+              <CallAnalysisSection analysis={callAnalysis} />
+            </div>
+          </div>
+          {/* <div className="transcription-section">
+            <TranscriptionSection finalTranscripts={finalTranscripts} />
+          </div> */}
         </div>
       </main>
     </div>
