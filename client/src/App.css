@@ -196,6 +196,15 @@
   text-decoration: line-through;
 }
 
+/* When call ended and tasks not completed, show pending tasks in red */
+.section-container.call-incomplete .task-item.pending-after-call .task-content {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.section-container.call-incomplete .task-item.pending-after-call .status-badge.pending {
+  border-color: #ff6b6b;
+}
+
 .status-badge {
   width: 20px;
   height: 20px;

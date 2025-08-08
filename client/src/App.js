@@ -89,9 +89,10 @@ const CustomerNumberSection = ({ customerNumber, setCustomerNumber, isLoading, e
 };
 
 // Individual components for each section
-const TaskListSection = ({ tasks, completedCount, totalCount }) => {
+const TaskListSection = ({ tasks, completedCount, totalCount, isCallEnded }) => {
+  const isIncompleteAfterCall = isCallEnded && completedCount < totalCount;
   return (
-    <div className="section-container">
+    <div className={`section-container ${isIncompleteAfterCall ? 'call-incomplete' : ''}`}>
       <div className="section-header">
         <h2>Task List</h2>
         <span className="task-count">
@@ -107,7 +108,11 @@ const TaskListSection = ({ tasks, completedCount, totalCount }) => {
         ) : (
           <div className="task-list">
             {tasks.map((taskItem, index) => (
-              <div key={index} className={`task-item ${taskItem.status}`}>
+              <div 
+                key={index} 
+                style={{ color: index === 1 ? 'yellow' : 'white' }}
+                className={`task-item ${taskItem.status} ${isIncompleteAfterCall && taskItem.status === 'pending' ? 'pending-after-call' : ''}`}
+              >
                 <div className="task-status">
                   <span className={`status-badge ${taskItem.status}`}>
                     {taskItem.status === 'completed' ? '✓' : '○'}
@@ -383,6 +388,7 @@ function App() {
   const [customerNumberError, setCustomerNumberError] = useState(null);
   const [callSummary, setCallSummary] = useState('');
   const [callAnalysis, setCallAnalysis] = useState(null);
+  const [isCallEnded, setIsCallEnded] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -554,9 +560,16 @@ function App() {
               });
               break;
 
+            case 'call_status_update':
+              if (message.data && message.data.status === 'completed') {
+                setIsCallEnded(true);
+              }
+              break;
+
             case 'call_summary':
               console.log(`🧾 [${receiveTime}] CALL SUMMARY RECEIVED`);
               setCallSummary(message.data && message.data.summary ? message.data.summary : '');
+              setIsCallEnded(true);
               break;
 
             case 'call_analysis':
@@ -583,6 +596,7 @@ function App() {
             case 'clear_transcripts':
               console.log(`🧹 [${receiveTime}] CLEAR TRANSCRIPTS RECEIVED:`, message.data);
               setFinalTranscripts([]);
+              setIsCallEnded(false);
               console.log(`✅ [${receiveTime}] Transcripts cleared for new call: ${message.data.callSid}`);
               break;
               
@@ -597,6 +611,7 @@ function App() {
               console.log(`🧹 [${receiveTime}] CLEAR CALL INSIGHTS RECEIVED`);
               setCallSummary('');
               setCallAnalysis(null);
+              setIsCallEnded(false);
               break;
               
             case 'transcription_error':
@@ -697,6 +712,7 @@ function App() {
               tasks={tasks}
               completedCount={completedCount}
               totalCount={totalCount}
+              isCallEnded={isCallEnded}
             />
           </div>
           <div className="recommendations-section">
