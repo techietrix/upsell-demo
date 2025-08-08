@@ -82,7 +82,7 @@ Response:`;
 
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
@@ -330,7 +330,7 @@ Based on this conversation, what are the most helpful recommendations for the ag
     // Call OpenAI API
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
