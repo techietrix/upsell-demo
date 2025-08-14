@@ -16,66 +16,120 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Global task management
-const TASKS = [
-  'Confirm customer name.',
-  "Confirm customer's phone number.", 
-  'Ask how they heard about us.',
-  'Ask what type of car customer is interested in.',
-  'Propose a test drive.'
+// Global task management - Updated structure with values and color
+const DEFAULT_TASK_LIST = [
+  { task: 'Confirm customer name.', status: 'pending', values: '', color: 'white' },
+  { task: "Confirm customer's phone number.", status: 'pending', values: '', color: 'white' },
+  { task: 'Ask how they heard about us.', status: 'pending', values: '', color: 'white' },
+  { task: 'Ask what type of car customer is interested in.', status: 'pending', values: '', color: 'white' },
+  { task: 'Propose a test drive.', status: 'pending', values: '', color: 'white' }
 ];
 
-let completedTasks = [];
+// Store task lists per call in Redis with key: callSid-taskList
+// Remove global completedTasks as we'll store per-call task lists in Redis
 
-// Reset completed tasks for new calls
-const resetTasksForCall = (callSid) => {
-  completedTasks = [];
- // console.log(`🔄 [${callSid}] Tasks reset for new call`);
+// Initialize task list for new calls in Redis
+const initializeTasksForCall = async (callSid) => {
+  try {
+    const taskListKey = `${callSid}-taskList`;
+    const initialTaskList = JSON.stringify(DEFAULT_TASK_LIST);
+    await redisClient.set(taskListKey, initialTaskList);
+    console.log(`🔄 [${callSid}] Task list initialized in Redis with key: ${taskListKey}`);
+  } catch (error) {
+    console.error(`❌ [${callSid}] Error initializing task list in Redis:`, error);
+  }
 };
 
-// Method to check task completion using OpenAI
+// Get task list from Redis
+const getTaskListFromRedis = async (callSid) => {
+  try {
+    const taskListKey = `${callSid}-taskList`;
+    const taskListData = await redisClient.get(taskListKey);
+    if (taskListData) {
+      return JSON.parse(taskListData);
+    }
+    return DEFAULT_TASK_LIST; // Fallback to default if not found
+  } catch (error) {
+    console.error(`❌ [${callSid}] Error getting task list from Redis:`, error);
+    return DEFAULT_TASK_LIST;
+  }
+};
+
+// Update task list in Redis
+const updateTaskListInRedis = async (callSid, updatedTaskList) => {
+  try {
+    const taskListKey = `${callSid}-taskList`;
+    await redisClient.set(taskListKey, JSON.stringify(updatedTaskList));
+    console.log(`✅ [${callSid}] Task list updated in Redis`);
+  } catch (error) {
+    console.error(`❌ [${callSid}] Error updating task list in Redis:`, error);
+  }
+};
+
+// Method to check task completion and extract values using OpenAI
 async function checkTaskCompletion(callSid, broadcastToDashboard) {
   try {
-   // console.log(`📋 [${callSid}] Checking task completion...`);
+    console.log(`📋 [${callSid}] Checking task completion and extracting values...`);
 
     // Get transcript data from Redis
     let transcripts = [];
     try {
       const redisData = await redisClient.lRange(callSid, 0, -1);
       transcripts = redisData.map(item => JSON.parse(item));
-     // console.log(`📝 [${callSid}] Retrieved ${transcripts.length} transcripts for task analysis`);
+      console.log(`📝 [${callSid}] Retrieved ${transcripts.length} transcripts for task analysis`);
     } catch (redisError) {
       console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
       return;
     }
+
     const transcriptText = await buildTranscriptText(callSid);
     if (transcripts.length === 0) {
-     // console.log(`⚠️ [${callSid}] No conversation data found for task checking`);
+      console.log(`⚠️ [${callSid}] No conversation data found for task checking`);
       return;
     }
 
-    // Format conversation for OpenAI
-    const conversationHistory = transcripts.map(transcript => {
-      return `${transcript.role === 'agent' ? 'Agent' : 'Customer'}: ${transcript.text}`;
-    }).join('\n');
+    // Get current task list from Redis
+    const currentTaskList = await getTaskListFromRedis(callSid);
 
-    // Create prompt to check task completion
-    const tasksToCheck = TASKS.filter(task => !completedTasks.includes(task));
-    
-    if (tasksToCheck.length === 0) {
-     // console.log(`✅ [${callSid}] All tasks already completed`);
-      return;
-    }
+    // Create prompt to analyze task completion and extract values
+    const prompt = `You are an AI assistant analyzing a phone conversation transcript to determine task completion and extract relevant values.
 
-    const prompt = `You are an AI assistant analyzing transcript of a phone conversation to determine if specific tasks in the TASKS LIST have been completed by the SDR/Agent.
-Based on the CONVERSATION HISTORY below, determine which of these tasks have been completed:
-**TASKS LIST**:
-${tasksToCheck.map((task, index) => `${index + 1}. ${task}`).join('\n')}
+Based on the CONVERSATION HISTORY below, for each task in the TASK LIST:
+1. Determine if the task has been completed
+2. Extract the specific value/information that was obtained for that task
+3. Update the status to 'completed' if the task is done, otherwise keep it 'pending'
+
+**CURRENT TASK LIST**:
+${currentTaskList.map((task, index) => `${index + 1}. ${task.task} (Current Status: ${task.status}, Current Value: "${task.values}")`).join('\n')}
+
 **CONVERSATION HISTORY**:
 ${transcriptText}
-Return ONLY a JSON array of task numbers (1, 2, 3, etc.) that have been CLEARLY completed in the conversation. If a task is not completed or only partially addressed, do not include it.
-Example response: [1, 3] (if tasks 1 and 3 are completed)
-Response:`
+
+Return a JSON array with the updated task list. For each task, include:
+- task: the original task description
+- status: 'completed' or 'pending'
+- values: the specific information extracted from the conversation for this task (e.g., customer name, phone number, etc.)
+- color: 'white' for pending, 'green' for completed
+
+Example response format:
+[
+  {
+    "task": "Confirm customer name.",
+    "status": "completed",
+    "values": "John Smith",
+    "color": "green"
+  },
+  {
+    "task": "Confirm customer's phone number.",
+    "status": "pending",
+    "values": "",
+    "color": "white"
+  }
+]
+
+Only mark a task as completed if it has been clearly addressed in the conversation. Extract specific values mentioned by the customer.
+
+Response:`;
 
     try {
       const completion = await openai.chat.completions.create({
@@ -83,41 +137,43 @@ Response:`
         messages: [
           {
             role: "system",
-            content: "You are a precise AI assistant that analyzes conversations to determine task completion. Only return completed task numbers in JSON array format."
+            content: "You are a precise AI assistant that analyzes conversations to determine task completion and extract specific values. Always respond with valid JSON."
           },
           {
             role: "user",
             content: prompt
           }
         ],
-        max_tokens: 100,
+        max_tokens: 800,
         temperature: 0.1,
       });
 
       const aiResponse = completion.choices[0].message.content.trim();
-     console.log(`\n\n\n\n\n\n🤖 [${callSid}] Task completion AI response: ${aiResponse}`);
+      console.log(`🤖 [${callSid}] Task analysis AI response:`, aiResponse);
 
       // Parse AI response
       try {
         // Extract JSON array from response
-        const jsonMatch = aiResponse.match(/\[([\d,\s]*)\]/);
-        if (jsonMatch) {
-          const completedTaskNumbers = JSON.parse(jsonMatch[0]);
+        const jsonStart = aiResponse.indexOf('[');
+        const jsonEnd = aiResponse.lastIndexOf(']') + 1;
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          const jsonStr = aiResponse.substring(jsonStart, jsonEnd);
+          const updatedTaskList = JSON.parse(jsonStr);
           
-          // Convert task numbers to actual task names
-          const newlyCompletedTasks = completedTaskNumbers.map(num => tasksToCheck[num - 1]).filter(Boolean);
-          
-          if (newlyCompletedTasks.length > 0) {
-            // Update global completed tasks
-            completedTasks = [...new Set([...completedTasks, ...newlyCompletedTasks])];
-          console.log(`*******Prompts*****`, prompt);
-           console.log(`✅ [${callSid}] Newly completed tasks:`, newlyCompletedTasks);
-           console.log(`📊 [${callSid}] Total completed tasks:`, completedTasks);
-
+          // Validate the structure
+          if (Array.isArray(updatedTaskList) && updatedTaskList.length === DEFAULT_TASK_LIST.length) {
+            // Update task list in Redis
+            await updateTaskListInRedis(callSid, updatedTaskList);
+            
+            // Count completed tasks
+            const completedCount = updatedTaskList.filter(task => task.status === 'completed').length;
+            
+            console.log(`✅ [${callSid}] Task list updated - ${completedCount}/${updatedTaskList.length} completed`);
+            
             // Broadcast updated task list
             broadcastTaskList(callSid, broadcastToDashboard);
           } else {
-           // console.log(`📝 [${callSid}] No new tasks completed`);
+            console.error(`❌ [${callSid}] Invalid task list structure from AI`);
           }
         }
       } catch (parseError) {
@@ -134,12 +190,11 @@ Response:`
 }
 
 // Broadcast current task list status
-function broadcastTaskList(callSid, broadcastToDashboard) {
+async function broadcastTaskList(callSid, broadcastToDashboard) {
   try {
-    const tasksWithStatus = TASKS.map(task => {
-      const status = completedTasks.includes(task) ? 'completed' : 'pending';
-      return { task, status };
-    });
+    // Get current task list from Redis
+    const tasksWithStatus = await getTaskListFromRedis(callSid);
+    const completedCount = tasksWithStatus.filter(task => task.status === 'completed').length;
 
     if (broadcastToDashboard) {
       broadcastToDashboard({
@@ -147,12 +202,12 @@ function broadcastTaskList(callSid, broadcastToDashboard) {
         data: {
           callSid,
           tasksWithStatus,
-          completedCount: completedTasks.length,
-          totalCount: TASKS.length,
+          completedCount,
+          totalCount: tasksWithStatus.length,
           timestamp: new Date().toISOString()
         }
       });
-     // console.log(`📡 [${callSid}] Task list broadcasted - ${completedTasks.length}/${TASKS.length} completed`);
+      console.log(`📡 [${callSid}] Task list broadcasted - ${completedCount}/${tasksWithStatus.length} completed`);
     }
   } catch (error) {
     console.error(`❌ [${callSid}] Error broadcasting task list:`, error);
@@ -161,7 +216,7 @@ function broadcastTaskList(callSid, broadcastToDashboard) {
 
 // Build call plan text
 function buildCallPlanText() {
-  return TASKS.map((task, idx) => `${idx + 1}. ${task}`).join('\n');
+  return DEFAULT_TASK_LIST.map((taskItem, idx) => `${idx + 1}. ${taskItem.task}`).join('\n');
 }
 
 // Build conversation transcript text from Redis
@@ -295,11 +350,11 @@ router.post('/voice', async (req, res) => {
     const targetNumber = await redisClient.get('TARGET_PHONE_NUMBER');
 
     
-    // Reset tasks for new call
-    resetTasksForCall(callSid);
+    // Initialize tasks for new call in Redis
+    await initializeTasksForCall(callSid);
     
-    // Broadcast reset task list for new call
-    broadcastTaskList(callSid, req.broadcastToDashboard);
+    // Broadcast initial task list for new call
+    await broadcastTaskList(callSid, req.broadcastToDashboard);
     
     // Broadcast message to clear transcripts for new call
     if (req.broadcastToDashboard) {
@@ -448,7 +503,7 @@ Based on the TASKS LIST, CONVERSATION HISTORY, PREVIOUS RECOMMENDATIONS and usin
     - Max of 1-2 sentences each
  
 **TASKS LIST**:
-${JSON.stringify(TASKS)}
+${JSON.stringify(DEFAULT_TASK_LIST.map(t => t.task))}
  
 **PREVIOUS RECOMMENDATIONS**
 ${JSON.stringify(previousRecommendations)}

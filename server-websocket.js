@@ -85,19 +85,21 @@ app.ws('/ws/dashboard', (ws, req) => {
     try {
       console.log(`📋 [${clientId}] Sending initial task list...`);
       
+      const initialTaskList = [
+        { task: 'Confirm customer name.', status: 'pending', values: '', color: 'white' },
+        { task: "Confirm customer's phone number.", status: 'pending', values: '', color: 'white' },
+        { task: 'Ask how they heard about us.', status: 'pending', values: '', color: 'white' },
+        { task: 'Ask what type of car customer is interested in.', status: 'pending', values: '', color: 'white' },
+        { task: 'Propose a test drive.', status: 'pending', values: '', color: 'white' }
+      ];
+      
       ws.send(JSON.stringify({
         type: 'task_list_update',
         data: {
           callSid: null,
-          tasksWithStatus: [
-            { task: 'Confirm customer name.', status: 'pending' },
-            { task: "Confirm customer's phone number.", status: 'pending' },
-            { task: 'Ask how they heard about us.', status: 'pending' },
-            { task: 'Ask what type of car customer is interested in.', status: 'pending' },
-            { task: 'Propose a test drive.', status: 'pending' }
-          ],
+          tasksWithStatus: initialTaskList,
           completedCount: 0,
-          totalCount: 3,
+          totalCount: initialTaskList.length,
           timestamp: new Date().toISOString()
         }
       }));

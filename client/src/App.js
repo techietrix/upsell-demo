@@ -110,7 +110,7 @@ const TaskListSection = ({ tasks, completedCount, totalCount, isCallEnded }) => 
             {tasks.map((taskItem, index) => (
               <div 
                 key={index} 
-                style={{ color: index === 1 ? 'yellow' : 'white' }}
+                style={{ color: taskItem.color || 'white' }}
                 className={`task-item ${taskItem.status} ${isIncompleteAfterCall && taskItem.status === 'pending' ? 'pending-after-call' : ''}`}
               >
                 <div className="task-status">
@@ -119,7 +119,14 @@ const TaskListSection = ({ tasks, completedCount, totalCount, isCallEnded }) => 
                   </span>
                 </div>
                 <div className="task-content">
-                  {taskItem.task}
+                  <div className="task-description">
+                    {taskItem.task}
+                  </div>
+                  {taskItem.values && (
+                    <div className="task-values">
+                      <strong></strong> {taskItem.values}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

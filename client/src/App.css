@@ -233,6 +233,25 @@
   line-height: 1.4;
 }
 
+.task-description {
+  margin-bottom: 4px;
+}
+
+.task-values {
+  font-size: 0.85rem;
+  color: #a0a0a0;
+  font-style: italic;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.task-values strong {
+  color: #fff;
+  font-style: normal;
+}
+
 /* Transcript List Styles */
 .transcript-list {
   display: flex;
