@@ -886,13 +886,17 @@ router.post('/transcription-status', async (req, res) => {
             generateRecommendation(CallSid, req.broadcastToDashboard).catch(error => {
               console.error(`❌ [${CallSid}] Failed to generate recommendation:`, error);
             });
+            
+            checkTaskCompletion(CallSid, req.broadcastToDashboard).catch(error => {
+              console.error(`❌ [${CallSid}] Failed to check task completion:`, error);
+            });
           }
 
           if(Track === 'inbound_track') {
             // Check task completion asynchronously (don't wait for it)
-            checkTaskCompletion(CallSid, req.broadcastToDashboard).catch(error => {
-              console.error(`❌ [${CallSid}] Failed to check task completion:`, error);
-            });
+            // checkTaskCompletion(CallSid, req.broadcastToDashboard).catch(error => {
+            //   console.error(`❌ [${CallSid}] Failed to check task completion:`, error);
+            // });
           }
           
         } catch (dbError) {
