@@ -30,27 +30,27 @@ let completedTasks = [];
 // Reset completed tasks for new calls
 const resetTasksForCall = (callSid) => {
   completedTasks = [];
-  console.log(`🔄 [${callSid}] Tasks reset for new call`);
+ // console.log(`🔄 [${callSid}] Tasks reset for new call`);
 };
 
 // Method to check task completion using OpenAI
 async function checkTaskCompletion(callSid, broadcastToDashboard) {
   try {
-    console.log(`📋 [${callSid}] Checking task completion...`);
+   // console.log(`📋 [${callSid}] Checking task completion...`);
 
     // Get transcript data from Redis
     let transcripts = [];
     try {
       const redisData = await redisClient.lRange(callSid, 0, -1);
       transcripts = redisData.map(item => JSON.parse(item));
-      console.log(`📝 [${callSid}] Retrieved ${transcripts.length} transcripts for task analysis`);
+     // console.log(`📝 [${callSid}] Retrieved ${transcripts.length} transcripts for task analysis`);
     } catch (redisError) {
       console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
       return;
     }
-
+    const transcriptText = await buildTranscriptText(callSid);
     if (transcripts.length === 0) {
-      console.log(`⚠️ [${callSid}] No conversation data found for task checking`);
+     // console.log(`⚠️ [${callSid}] No conversation data found for task checking`);
       return;
     }
 
@@ -63,24 +63,19 @@ async function checkTaskCompletion(callSid, broadcastToDashboard) {
     const tasksToCheck = TASKS.filter(task => !completedTasks.includes(task));
     
     if (tasksToCheck.length === 0) {
-      console.log(`✅ [${callSid}] All tasks already completed`);
+     // console.log(`✅ [${callSid}] All tasks already completed`);
       return;
     }
 
-    const prompt = `You are an AI assistant analyzing a customer service conversation to determine if specific tasks have been completed.
-
-Based on the conversation history below, determine which of these tasks have been completed:
-
-TASKS TO CHECK:
+    const prompt = `You are an AI assistant analyzing transcript of a phone conversation to determine if specific tasks in the TASKS LIST have been completed by the SDR/Agent.
+Based on the CONVERSATION HISTORY below, determine which of these tasks have been completed:
+**TASKS LIST**:
 ${tasksToCheck.map((task, index) => `${index + 1}. ${task}`).join('\n')}
-
-CONVERSATION HISTORY:
-${conversationHistory}
-
+**CONVERSATION HISTORY**:
+${transcriptText}
 Return ONLY a JSON array of task numbers (1, 2, 3, etc.) that have been CLEARLY completed in the conversation. If a task is not completed or only partially addressed, do not include it.
-
 Example response: [1, 3] (if tasks 1 and 3 are completed)
-Response:`;
+Response:`
 
     try {
       const completion = await openai.chat.completions.create({
@@ -100,7 +95,7 @@ Response:`;
       });
 
       const aiResponse = completion.choices[0].message.content.trim();
-      console.log(`🤖 [${callSid}] Task completion AI response: ${aiResponse}`);
+     console.log(`\n\n\n\n\n\n🤖 [${callSid}] Task completion AI response: ${aiResponse}`);
 
       // Parse AI response
       try {
@@ -115,14 +110,14 @@ Response:`;
           if (newlyCompletedTasks.length > 0) {
             // Update global completed tasks
             completedTasks = [...new Set([...completedTasks, ...newlyCompletedTasks])];
-            
-            console.log(`✅ [${callSid}] Newly completed tasks:`, newlyCompletedTasks);
-            console.log(`📊 [${callSid}] Total completed tasks:`, completedTasks);
+          console.log(`*******Prompts*****`, prompt);
+           console.log(`✅ [${callSid}] Newly completed tasks:`, newlyCompletedTasks);
+           console.log(`📊 [${callSid}] Total completed tasks:`, completedTasks);
 
             // Broadcast updated task list
             broadcastTaskList(callSid, broadcastToDashboard);
           } else {
-            console.log(`📝 [${callSid}] No new tasks completed`);
+           // console.log(`📝 [${callSid}] No new tasks completed`);
           }
         }
       } catch (parseError) {
@@ -157,7 +152,7 @@ function broadcastTaskList(callSid, broadcastToDashboard) {
           timestamp: new Date().toISOString()
         }
       });
-      console.log(`📡 [${callSid}] Task list broadcasted - ${completedTasks.length}/${TASKS.length} completed`);
+     // console.log(`📡 [${callSid}] Task list broadcasted - ${completedTasks.length}/${TASKS.length} completed`);
     }
   } catch (error) {
     console.error(`❌ [${callSid}] Error broadcasting task list:`, error);
@@ -291,11 +286,6 @@ ${transcriptText}
 // Handle incoming calls
 router.post('/voice', async (req, res) => {
   const timestamp = new Date().toISOString();
-  console.log(`\n🔊 [${timestamp}] TWILIO WEBHOOK RECEIVED`);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('Host:', req.get('host'));
-  console.log('User-Agent:', req.get('user-agent'));
   
   try {
     const twiml = new VoiceResponse();
@@ -304,7 +294,6 @@ router.post('/voice', async (req, res) => {
     // const targetNumber = process.env.TARGET_PHONE_NUMBER;`
     const targetNumber = await redisClient.get('TARGET_PHONE_NUMBER');
 
-    console.log(`📞 [${callSid}] Processing call: ${callerNumber} → ${targetNumber}`);
     
     // Reset tasks for new call
     resetTasksForCall(callSid);
@@ -322,7 +311,7 @@ router.post('/voice', async (req, res) => {
           timestamp: timestamp
         }
       });
-      console.log(`🧹 [${callSid}] Broadcast clear transcripts message sent to dashboard`);
+     // console.log(`🧹 [${callSid}] Broadcast clear transcripts message sent to dashboard`);
       
       // Broadcast message to clear recommendations for new call
       req.broadcastToDashboard({
@@ -333,7 +322,7 @@ router.post('/voice', async (req, res) => {
           timestamp: timestamp
         }
       });
-      console.log(`💡 [${callSid}] Broadcast clear recommendations message sent to dashboard`);
+     // console.log(`💡 [${callSid}] Broadcast clear recommendations message sent to dashboard`);
 
       // Broadcast message to clear previous call insights
       req.broadcastToDashboard({
@@ -344,7 +333,7 @@ router.post('/voice', async (req, res) => {
           timestamp: timestamp
         }
       });
-      console.log(`🧼 [${callSid}] Broadcast clear call insights message sent to dashboard`);
+     // console.log(`🧼 [${callSid}] Broadcast clear call insights message sent to dashboard`);
     }
 
     // Create call record in database (only if MongoDB is available)
@@ -356,9 +345,8 @@ router.post('/voice', async (req, res) => {
         status: 'initiated'
       });
       await call.save();
-      console.log(`✅ [${callSid}] Call record saved to MongoDB`);
     } catch (dbError) {
-      console.log(`⚠️  [${callSid}] MongoDB save failed:`, dbError.message);
+     console.log(`⚠️  [${callSid}] MongoDB save failed:`, dbError.message);
     }
 
     // Start real-time transcription stream FIRST (before dial)
@@ -368,13 +356,6 @@ router.post('/voice', async (req, res) => {
     
     // Debug: Check if this is a real Twilio call
     const isRealTwilioCall = req.headers['user-agent'] && req.headers['user-agent'].includes('TwilioProxy');
-    console.log(`🔍 [${callSid}] Is real Twilio call: ${isRealTwilioCall}`);
-    console.log(`🔍 [${callSid}] User-Agent: ${req.headers['user-agent']}`);
-    
-    console.log(`🎵 [${callSid}] Configuring media stream:`);
-    console.log(`   - Protocol: ${protocol}`);
-    console.log(`   - Host: ${host}`);
-    console.log(`   - Stream URL: ${streamUrl}`);
     
         // Generate complete TwiML manually since helper library doesn't support transcription yet
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
@@ -392,10 +373,6 @@ router.post('/voice', async (req, res) => {
     <Number statusCallback="/api/twilio/call-status" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed">${targetNumber}</Number>
   </Dial>
 </Response>`;
-    console.log(`📋 [${callSid}] TwiML Response:`, twimlResponse);
-    console.log(`✅ [${callSid}] Webhook response sent successfully`);
-      console.log(`🔍 [${callSid}] EXPECTING TRANSCRIPTION CALLBACKS TO: ${protocol}://${host}/api/twilio/transcription-status`);
-  console.log(`⏰ [${callSid}] Real-time transcription should start when call connects\n`);
 
     res.type('text/xml');
     res.send(twimlResponse);
@@ -413,14 +390,12 @@ router.post('/voice', async (req, res) => {
 // Helper method to generate contextual recommendations based on conversation
 async function generateRecommendation(callSid, broadcastToDashboard) {
   try {
-    console.log(`🤖 [${callSid}] Generating contextual recommendations...`);
 
     // Get transcript data from Redis
     let transcripts = [];
     try {
       const redisData = await redisClient.lRange(callSid, 0, -1);
       transcripts = redisData.map(item => JSON.parse(item));
-      console.log(`📋 [${callSid}] Retrieved ${transcripts.length} transcripts from Redis`);
     } catch (redisError) {
       console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
       return;
@@ -429,16 +404,30 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
     //get recommendations from redis
     let previousRecommendations = [];
     try {
-      const redisData = await redisClient.lRange(`callSid_recommendations`, 0, -1);
+      const redisData = await redisClient.lRange(`${callSid}_recommendations`, 0, -1);
       previousRecommendations = redisData.map(item => JSON.parse(item));
-      console.log(`📋 [${callSid}] Retrieved ${recommendations.length} recommendations from Redis`);
+     // console.log(`📋 [${callSid}] Retrieved ${previousRecommendations.length} recommendation batches from Redis`);
     } catch (redisError) {
       console.error(`❌ [${callSid}] Redis retrieval error:`, redisError.message);
       // return;
     }
 
+    // Build a set of existing recommendation titles (case-insensitive, trimmed)
+    const existingTitles = new Set();
+    try {
+      previousRecommendations.forEach(batch => {
+        const arr = Array.isArray(batch) ? batch : [batch];
+        arr.forEach(rec => {
+          if (rec && rec.title) {
+            existingTitles.add(String(rec.title).trim().toLowerCase());
+          }
+        });
+      });
+    } catch (titleSetError) {
+      console.warn(`⚠️ [${callSid}] Could not build existing titles set:`, titleSetError.message);
+    }
+
     if (transcripts.length === 0) {
-      console.log(`⚠️ [${callSid}] No conversation data found for recommendations`);
       return;
     }
 
@@ -447,7 +436,6 @@ async function generateRecommendation(callSid, broadcastToDashboard) {
       return `${transcript.role === 'agent' ? 'Agent' : 'Customer'}: ${transcript.text}`;
     }).join('\n');
 
-    console.log(`📝 [${callSid}] Conversation formatted for OpenAI (${conversationHistory.length} chars)`);
 
     // Create OpenAI prompt for multiple contextual recommendations
     const prompt = `You are an AI assistant helping a customer service agent during a real-time phone conversation.
@@ -508,7 +496,8 @@ You do not need to provide recommendation every time. If in your professional ju
     How are you finding the space and comfort?
     Have you noticed anything that you would like us to investigate?
     Have you considered the extended warranty?
-     
+     Any recommendation based on TASK LIST has a high priority. Any recommendation based on SALES PLAYBOOK ADDITIONAL INFORMATION is medium priority. Any other recommendation is Low priority. 
+ 
     Return the recommendations in this exact JSON format:
     [
      {
@@ -542,7 +531,6 @@ You do not need to provide recommendation every time. If in your professional ju
       });
 
       const aiResponse = completion.choices[0].message.content.trim();
-      console.log(`**********🤖 [${callSid}] Raw AI response: ${aiResponse} **********`);
       
       // Parse AI response
       let recommendations = [];
@@ -581,12 +569,23 @@ You do not need to provide recommendation every time. If in your professional ju
         }];
       }
 
-      if (recommendations.length > 0) {
-        console.log(`✅ [${callSid}] Generated ${recommendations.length} contextual recommendations`);
+      // Deduplicate by title against existing Redis titles and within current batch
+      const seenTitles = new Set();
+      const filteredRecommendations = recommendations.filter(rec => {
+        const titleKey = String(rec.title || '').trim().toLowerCase();
+        if (!titleKey) return false;
+        if (existingTitles.has(titleKey)) return false;
+        if (seenTitles.has(titleKey)) return false;
+        seenTitles.add(titleKey);
+        return true;
+      });
+
+      if (filteredRecommendations.length > 0) {
+       // console.log(`✅ [${callSid}] Generated ${filteredRecommendations.length} new, unique contextual recommendations`);
         // Store recommendations in Redis
         try {
-          await redisClient.rPush(`callSid_recommendations`, JSON.stringify(recommendations));
-          console.log(`🗄️ [${callSid}] Recommendations stored in Redis`);
+          await redisClient.rPush(`${callSid}_recommendations`, JSON.stringify(filteredRecommendations));
+         // console.log(`🗄️ [${callSid}] Unique recommendations stored in Redis`);
         } catch (redisError) {
           console.error(`❌ [${callSid}] Redis storage error:`, redisError.message);
         }
@@ -595,10 +594,11 @@ You do not need to provide recommendation every time. If in your professional ju
         if (broadcastToDashboard) {
           broadcastToDashboard({
             type: 'backend_recommendations',
-            data: recommendations
+            data: filteredRecommendations
           });
-          console.log(`📡 [${callSid}] Contextual recommendations broadcasted to dashboard`);
         }
+      } else {
+        //// console.log(`⚠️ [${callSid}] All generated recommendations are duplicates by title; skipping store and broadcast`);
       }
 
     } catch (openaiError) {
@@ -617,7 +617,6 @@ router.post('/call-status', async (req, res) => {
     const callStatus = req.body.CallStatus;
     const duration = req.body.CallDuration;
 
-    console.log(`📞 [${callSid}] Call status update: ${callStatus}`);
 
     // Update call status in database
     const updateData = { status: callStatus };
@@ -661,7 +660,7 @@ router.post('/call-status', async (req, res) => {
               timestamp: new Date().toISOString()
             }
           });
-          console.log(`🧾 [${callSid}] Call summary broadcasted`);
+         // console.log(`🧾 [${callSid}] Call summary broadcasted`);
         }
 
         if (analysisJson) {
@@ -673,7 +672,7 @@ router.post('/call-status', async (req, res) => {
               timestamp: new Date().toISOString()
             }
           });
-          console.log(`🔎 [${callSid}] Call analysis broadcasted`);
+         // console.log(`🔎 [${callSid}] Call analysis broadcasted`);
         }
       } catch (e) {
         console.error(`❌ [${callSid}] Failed to generate/broadcast call insights:`, e.message);
@@ -693,7 +692,7 @@ router.post('/recording-status', async (req, res) => {
     const recordingUrl = req.body.RecordingUrl;
     const callSid = req.body.CallSid;
     
-    console.log(`📹 [${callSid}] Recording available: ${recordingUrl}`);
+   // console.log(`📹 [${callSid}] Recording available: ${recordingUrl}`);
     
     // Update call record with recording URL
     await Call.findOneAndUpdate(
@@ -733,8 +732,6 @@ setInterval(() => {
 router.post('/transcription-status', async (req, res) => {
   try {
     const timestamp = new Date().toISOString();
-    console.log(`\n📝 [${timestamp}] TWILIO TRANSCRIPTION CALLBACK`);
-    console.log('Body:', JSON.stringify(req.body, null, 2));
 
     const { 
       TranscriptionSid,
@@ -745,7 +742,6 @@ router.post('/transcription-status', async (req, res) => {
       Track
     } = req.body;
 
-    console.log(`🎯 [${CallSid}] Transcription event: ${TranscriptionEvent}`);
     
     if (TranscriptionData && TranscriptionEvent === 'transcription-content') {
       // Parse the TranscriptionData JSON string
@@ -761,7 +757,7 @@ router.post('/transcription-status', async (req, res) => {
       const { transcript, confidence } = parsedData;
       const isPartial = Final !== 'true';
       
-      console.log(`📝 [${CallSid}] Track: ${Track}, Text: "${transcript}" (confidence: ${confidence}, final: ${Final})`);
+     // console.log(`📝 [${CallSid}] Track: ${Track}, Text: "${transcript}" (confidence: ${confidence}, final: ${Final})`);
       
       // Store transcript in database if it's final (not partial)
       if (Final === 'true') {
@@ -771,7 +767,7 @@ router.post('/transcription-status', async (req, res) => {
           
           // Check if we've already processed this exact transcript
           if (recentTranscripts.has(transcriptId)) {
-            console.log(`⚠️ [${CallSid}] Duplicate transcript detected, skipping broadcast: "${transcript}"`);
+           // console.log(`⚠️ [${CallSid}] Duplicate transcript detected, skipping broadcast: "${transcript}"`);
             res.status(200).send('OK');
             return;
           }
@@ -800,13 +796,13 @@ router.post('/transcription-status', async (req, res) => {
           // Store transcript in Redis using RPUSH with CallSid as key
           try {
             await redisClient.rPush(CallSid, JSON.stringify(storeInRedis));
-            console.log(`🗄️ [${CallSid}] Transcript stored in Redis - Role: ${storeInRedis.role}, Text: "${transcript}"`);
+           // console.log(`🗄️ [${CallSid}] Transcript stored in Redis - Role: ${storeInRedis.role}, Text: "${transcript}"`);
           } catch (redisError) {
             console.error(`❌ [${CallSid}] Redis RPUSH error:`, redisError.message);
           }
 
           req.broadcastToDashboard(transcriptData);
-          console.log(`📡 [${CallSid}] Transcript broadcasted to dashboard`);
+         // console.log(`📡 [${CallSid}] Transcript broadcasted to dashboard`);
 
 
           const Call = require('../models/Call');
@@ -825,11 +821,11 @@ router.post('/transcription-status', async (req, res) => {
             },
             { upsert: true }
           );
-          console.log(`💾 [${CallSid}] Final transcript saved to database - Track: ${Track}, Text: "${transcript}"`);
+         // console.log(`💾 [${CallSid}] Final transcript saved to database - Track: ${Track}, Text: "${transcript}"`);
           
           // Generate AI recommendation and check task completion when customer finishes speaking
           if (Track === 'outbound_track') {
-            console.log(`🎯 [${CallSid}] Customer finished speaking, generating AI recommendation and checking tasks...`);
+           // console.log(`🎯 [${CallSid}] Customer finished speaking, generating AI recommendation and checking tasks...`);
             
             // Call recommendation method asynchronously (don't wait for it)
             generateRecommendation(CallSid, req.broadcastToDashboard).catch(error => {
@@ -860,12 +856,7 @@ router.post('/transcription-status', async (req, res) => {
 // WebSocket handler for Twilio media streams
 router.ws('/media-stream', (ws, req) => {
   const connectionTime = new Date().toISOString();
-  console.log(`\n🎵 [${connectionTime}] TWILIO MEDIA WEBSOCKET CONNECTED`);
-  console.log('🚨 THIS IS THE MEDIA STREAM ENDPOINT BEING CALLED!');
-  console.log('WebSocket Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Remote Address:', req.connection.remoteAddress);
-  console.log('User-Agent:', req.headers['user-agent']);
-  console.log('Origin:', req.headers.origin);
+
   
   let callSid = null;
   let deepgramConnection = null;
@@ -879,18 +870,11 @@ router.ws('/media-stream', (ws, req) => {
     
     try {
       const msg = JSON.parse(message);
-      // console.log(`📨 [${timestamp}] Media WS Message #${messageCount} - Event: ${msg.event}`);
       
       if (msg.event === 'connected') {
-        console.log(`✅ [MEDIA-WS] Twilio media stream protocol connected`);
-        console.log('Connected payload:', JSON.stringify(msg, null, 2));
-        
       } else if (msg.event === 'start') {
         callSid = msg.start.callSid;
         isStreamActive = true;
-        console.log(`\n🚀 [${callSid}] MEDIA STREAM STARTED`);
-        console.log('Start payload:', JSON.stringify(msg.start, null, 2));
-        
         // Broadcast stream start to dashboard
         if (req.broadcastToDashboard) {
           req.broadcastToDashboard({
@@ -904,9 +888,9 @@ router.ws('/media-stream', (ws, req) => {
         }
         
         try {
-          console.log(`🔧 [${callSid}] Initializing Deepgram connection...`);
+         // console.log(`🔧 [${callSid}] Initializing Deepgram connection...`);
           deepgramConnection = await transcriptionService.initializeStream(callSid, req.broadcastToDashboard);
-          console.log(`✅ [${callSid}] Deepgram connection established successfully`);
+         console.log(`✅ [${callSid}] Deepgram connection established successfully`);
         } catch (error) {
           console.error(`❌ [${callSid}] DEEPGRAM INITIALIZATION FAILED:`, error);
           console.error('Deepgram error stack:', error.stack);
@@ -929,7 +913,7 @@ router.ws('/media-stream', (ws, req) => {
         
         // Log every 50th audio packet to avoid spam
         if (audioPacketCount % 50 === 1) {
-          console.log(`🎤 [${callSid}] Audio packet #${audioPacketCount} - Payload size: ${msg.media.payload ? msg.media.payload.length : 0} chars`);
+         // console.log(`🎤 [${callSid}] Audio packet #${audioPacketCount} - Payload size: ${msg.media.payload ? msg.media.payload.length : 0} chars`);
         }
         
         // Forward audio data to Deepgram
@@ -940,20 +924,20 @@ router.ws('/media-stream', (ws, req) => {
             
             // Log every 100th audio forward
             if (audioPacketCount % 100 === 1) {
-              console.log(`📤 [${callSid}] Audio forwarded to Deepgram - Buffer size: ${audioBuffer.length} bytes`);
+             // console.log(`📤 [${callSid}] Audio forwarded to Deepgram - Buffer size: ${audioBuffer.length} bytes`);
             }
           } catch (error) {
             console.error(`❌ [${callSid}] Error sending audio to Deepgram:`, error);
           }
         } else {
           if (audioPacketCount % 50 === 1) {
-            console.log(`⚠️  [${callSid}] Audio not forwarded - DG: ${!!deepgramConnection}, Payload: ${!!msg.media.payload}, Active: ${isStreamActive}`);
+           // console.log(`⚠️  [${callSid}] Audio not forwarded - DG: ${!!deepgramConnection}, Payload: ${!!msg.media.payload}, Active: ${isStreamActive}`);
           }
         }
         
       } else if (msg.event === 'stop') {
-        console.log(`\n🛑 [${callSid}] MEDIA STREAM STOPPED`);
-        console.log(`📊 [${callSid}] Stream stats - Messages: ${messageCount}, Audio packets: ${audioPacketCount}`);
+       // console.log(`\n🛑 [${callSid}] MEDIA STREAM STOPPED`);
+       // console.log(`📊 [${callSid}] Stream stats - Messages: ${messageCount}, Audio packets: ${audioPacketCount}`);
         isStreamActive = false;
         
         // Broadcast stream stop to dashboard
@@ -973,7 +957,7 @@ router.ws('/media-stream', (ws, req) => {
         
         // Generate and broadcast call summary & analysis when media stream stops
         if (req.broadcastToDashboard && callSid) {
-          console.log(`🧾 [${callSid}] Generating call summary and analysis after media stream stop...`);
+         // console.log(`🧾 [${callSid}] Generating call summary and analysis after media stream stop...`);
           try {
             const [summaryText, analysisJson] = await Promise.all([
               generateCallSummary(callSid),
@@ -989,7 +973,7 @@ router.ws('/media-stream', (ws, req) => {
                   timestamp: new Date().toISOString()
                 }
               });
-              console.log(`🧾 [${callSid}] Call summary broadcasted from media stream stop`);
+             // console.log(`🧾 [${callSid}] Call summary broadcasted from media stream stop`);
             }
 
             if (analysisJson) {
@@ -1001,7 +985,7 @@ router.ws('/media-stream', (ws, req) => {
                   timestamp: new Date().toISOString()
                 }
               });
-              console.log(`🔎 [${callSid}] Call analysis broadcasted from media stream stop`);
+             // console.log(`🔎 [${callSid}] Call analysis broadcasted from media stream stop`);
             }
           } catch (e) {
             console.error(`❌ [${callSid}] Failed to generate/broadcast call insights from media stream stop:`, e.message);
@@ -1011,13 +995,13 @@ router.ws('/media-stream', (ws, req) => {
         if (deepgramConnection) {
           try {
             deepgramConnection.finish();
-            console.log(`✅ [${callSid}] Deepgram connection finished gracefully`);
+           // console.log(`✅ [${callSid}] Deepgram connection finished gracefully`);
           } catch (error) {
             console.error(`❌ [${callSid}] Error finishing Deepgram connection:`, error);
           }
         }
       } else {
-        console.log(`🔍 [${callSid}] Unknown media event: ${msg.event}`, msg);
+       // console.log(`🔍 [${callSid}] Unknown media event: ${msg.event}`, msg);
       }
     } catch (error) {
       console.error(`❌ [${callSid}] Error processing media WebSocket message:`, error);
@@ -1026,17 +1010,17 @@ router.ws('/media-stream', (ws, req) => {
   });
 
   ws.on('close', async (code, reason) => {
-    console.log(`\n🔌 [${callSid}] MEDIA WEBSOCKET CLOSED`);
-    console.log(`   - Code: ${code}`);
-    console.log(`   - Reason: ${reason}`);
-    console.log(`   - Total messages: ${messageCount}`);
-    console.log(`   - Audio packets: ${audioPacketCount}`);
+   // console.log(`\n🔌 [${callSid}] MEDIA WEBSOCKET CLOSED`);
+   // console.log(`   - Code: ${code}`);
+   // console.log(`   - Reason: ${reason}`);
+   // console.log(`   - Total messages: ${messageCount}`);
+   // console.log(`   - Audio packets: ${audioPacketCount}`);
     
     isStreamActive = false;
     
     // Generate and broadcast call summary & analysis when WebSocket closes (fallback)
     if (req.broadcastToDashboard && callSid && audioPacketCount > 0) {
-      console.log(`🧾 [${callSid}] Generating call summary and analysis after WebSocket close...`);
+     // console.log(`🧾 [${callSid}] Generating call summary and analysis after WebSocket close...`);
       try {
         const [summaryText, analysisJson] = await Promise.all([
           generateCallSummary(callSid),
@@ -1052,7 +1036,7 @@ router.ws('/media-stream', (ws, req) => {
               timestamp: new Date().toISOString()
             }
           });
-          console.log(`🧾 [${callSid}] Call summary broadcasted from WebSocket close`);
+         // console.log(`🧾 [${callSid}] Call summary broadcasted from WebSocket close`);
         }
 
         if (analysisJson) {
@@ -1064,7 +1048,7 @@ router.ws('/media-stream', (ws, req) => {
               timestamp: new Date().toISOString()
             }
           });
-          console.log(`🔎 [${callSid}] Call analysis broadcasted from WebSocket close`);
+         // console.log(`🔎 [${callSid}] Call analysis broadcasted from WebSocket close`);
         }
       } catch (e) {
         console.error(`❌ [${callSid}] Failed to generate/broadcast call insights from WebSocket close:`, e.message);
@@ -1074,7 +1058,7 @@ router.ws('/media-stream', (ws, req) => {
     if (deepgramConnection) {
       try {
         deepgramConnection.finish();
-        console.log(`✅ [${callSid}] Deepgram connection cleaned up`);
+       // console.log(`✅ [${callSid}] Deepgram connection cleaned up`);
       } catch (error) {
         console.error(`❌ [${callSid}] Error cleaning up Deepgram:`, error);
       }
@@ -1099,7 +1083,7 @@ router.ws('/media-stream', (ws, req) => {
 // Test endpoint to manually trigger summary and analysis
 router.post('/test-summary/:callSid', async (req, res) => {
   const { callSid } = req.params;
-  console.log(`🧪 [${callSid}] Manual test trigger for summary and analysis`);
+ // console.log(`🧪 [${callSid}] Manual test trigger for summary and analysis`);
   
   try {
     const [summaryText, analysisJson] = await Promise.all([
@@ -1117,7 +1101,7 @@ router.post('/test-summary/:callSid', async (req, res) => {
             timestamp: new Date().toISOString()
           }
         });
-        console.log(`🧾 [${callSid}] Test call summary broadcasted`);
+       // console.log(`🧾 [${callSid}] Test call summary broadcasted`);
       }
 
       if (analysisJson) {
@@ -1129,7 +1113,7 @@ router.post('/test-summary/:callSid', async (req, res) => {
             timestamp: new Date().toISOString()
           }
         });
-        console.log(`🔎 [${callSid}] Test call analysis broadcasted`);
+       // console.log(`🔎 [${callSid}] Test call analysis broadcasted`);
       }
     }
 
