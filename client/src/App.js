@@ -110,7 +110,7 @@ const TaskListSection = ({ tasks, completedCount, totalCount, isCallEnded }) => 
             {tasks.map((taskItem, index) => (
               <div 
                 key={index} 
-                style={{ color: taskItem.color || 'white' }}
+                style={{ color: index === 1 ? 'yellow' : 'white' }}
                 className={`task-item ${taskItem.status} ${isIncompleteAfterCall && taskItem.status === 'pending' ? 'pending-after-call' : ''}`}
               >
                 <div className="task-status">
@@ -123,7 +123,7 @@ const TaskListSection = ({ tasks, completedCount, totalCount, isCallEnded }) => 
                     {taskItem.task}
                   </div>
                   {taskItem.values && (
-                    <div className="task-values">
+                    <div className="task-values" style={{ textDecoration: 'none' }}>
                       <strong></strong> {taskItem.values}
                     </div>
                   )}
@@ -340,7 +340,20 @@ const CallAnalysisSection = ({ analysis }) => {
           return (
             <ul>
               {value.map((item, idx) => (
-                <li key={idx}>{item}</li>
+                <li key={idx}>
+                  {typeof item === 'object' && item !== null ? (
+                    <div className="missed-action-item">
+                      {item.Step && <strong>Step {item.Step}:</strong>} 
+                      {item.Status && <span className={`status-${item.Status.toLowerCase()}`}> {item.Status}</span>}
+                      {item.Reason && <div className="reason">{item.Reason}</div>}
+                      {typeof item === 'object' && !item.Step && !item.Status && !item.Reason && (
+                        <div>{JSON.stringify(item)}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>{item}</div>
+                  )}
+                </li>
               ))}
             </ul>
           );
@@ -608,15 +621,17 @@ function App() {
 
             case 'call_summary':
               console.log(`🧾 [${receiveTime}] CALL SUMMARY RECEIVED`);
-              setCallSummary(message.data && message.data.summary ? message.data.summary : '');
+              // Handle both old format (message.data.summary) and new format (message.data directly)
+              const summaryData = message.data?.summary || message.data || '';
+              setCallSummary(summaryData);
               setIsCallEnded(true);
               break;
 
             case 'call_analysis':
               console.log(`🔎 [${receiveTime}] CALL ANALYSIS RECEIVED`);
-              // if analysis is JSON string, try to parse
-              if (message.data && message.data.analysis) {
-                const analysisPayload = message.data.analysis;
+              // Handle both old format (message.data.analysis) and new format (message.data directly)
+              const analysisPayload = message.data?.analysis || message.data || '';
+              if (analysisPayload) {
                 try {
                   const parsed = typeof analysisPayload === 'string' ? JSON.parse(analysisPayload) : analysisPayload;
                   setCallAnalysis(parsed);

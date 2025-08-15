@@ -192,7 +192,7 @@
   opacity: 0.7;
 }
 
-.task-item.completed .task-content {
+.task-item.completed .task-description {
   text-decoration: line-through;
 }
 
@@ -229,22 +229,24 @@
 
 .task-content {
   flex: 1;
-  font-size: 0.95rem;
+  font-size: 1.2rem;
   line-height: 1.4;
 }
 
 .task-description {
   margin-bottom: 4px;
+  font-size: 1.2rem;
 }
 
 .task-values {
-  font-size: 0.85rem;
+  font-size: 1.3rem;
   color: #a0a0a0;
   font-style: italic;
   margin-top: 4px;
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
+  text-decoration: none;
 }
 
 .task-values strong {
@@ -581,6 +583,38 @@
 
 .analysis-section li:last-child {
   margin-bottom: 0;
+}
+
+/* Missed Action Item Styling */
+.missed-action-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-left: 3px solid #ff6b6b;
+}
+
+.missed-action-item strong {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+.status-missed {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.missed-action-item .reason {
+  margin-top: 6px;
+  font-style: italic;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
 /* Customer Number Section Styles */
